@@ -224,3 +224,7 @@ venv/
 __pycache__/
 *.pyc
 .vscode/
+
+# SQLite 数据文件（本地数据不入库）
+*.db
+data/*.db
