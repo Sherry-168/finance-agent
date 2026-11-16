@@ -1,6 +1,15 @@
-fastapi
-uvicorn
-gradio
-openai
-python-dotenv
-pydantic
+# 后端依赖（Python 3.11+），版本区间对齐本地已验证环境（Python 3.13 + fastapi 0.163）
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.7,<3.0
+python-dotenv>=1.0,<2.0
+
+# LLM（OpenAI 兼容：DeepSeek / Qwen / GLM 任一）
+openai>=1.30,<2.0
+
+# 前端（Gradio）依赖一并声明：同一镜像承载 backend 与 frontend 两个服务
+gradio>=6.0,<7.0
+httpx>=0.27
+
+# 测试（tests/ 下为 pytest 用例，评审可在容器内直接跑）
+pytest>=8.0
