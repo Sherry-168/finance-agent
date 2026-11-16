@@ -224,3 +224,8 @@ venv/
 __pycache__/
 *.pyc
 .vscode/
+# 前端 / 本地运行时产物
+data/
+.gradio/
+.DS_Store
+Thumbs.db
