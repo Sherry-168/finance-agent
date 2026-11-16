@@ -52,13 +52,30 @@ def tip(text: str, kind: str = "info") -> str:
     return f'<div class="fa-tip{extra}">{text}</div>'
 
 
+def format_yuan(value) -> str:
+    """金额展示格式化：¥1,286.50。
+
+    约定（docs/api.md §1）：对外接口的金额单位统一为「元」，前端不做换算，
+    只负责展示格式；value 非法时返回占位符。
+    """
+    if isinstance(value, (int, float)):
+        return f"¥{value:,.2f}"
+    return "¥ --"
+
+
+def format_ratio(value) -> str:
+    """占比 / 使用率展示：0.83 → 83%（约定为 0~1 小数）。"""
+    if isinstance(value, (int, float)):
+        return f"{value * 100:.0f}%"
+    return "--%"
+
+
 def draft_summary(draft: dict) -> str:
     """把归一化后的草稿整理成 AI 气泡文案（不参与任何计算）。"""
     fields = draft.get("fields") or {}
     lines = []
 
-    amount = fields.get("amount")
-    amount_text = f"¥{amount:,.2f}" if isinstance(amount, (int, float)) else "未识别"
+    amount_text = format_yuan(fields.get("amount")) if fields.get("amount") is not None else "未识别"
     lines.append(f"金额：{amount_text}")
     lines.append(f"类别：{fields.get('category') or '未识别'}")
     if fields.get("merchant"):
