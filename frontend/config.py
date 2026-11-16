@@ -35,6 +35,11 @@ DEFAULT_PAGE = 1
 DEFAULT_PAGE_SIZE = 10
 PAGE_SIZE_CHOICES = [10, 20, 50]
 
+# ---------------------------------------------------------------- 联调兜底
+# 后端未就绪 / 未启动时，解析等只读交互自动降级到本地 Mock，保证 UI 可演示；
+# 业务错误（code != 0）不降级，照常提示，避免掩盖真实问题。
+MOCK_FALLBACK = os.getenv("MOCK_FALLBACK", "1").lower() not in ("0", "false", "no")
+
 # ---------------------------------------------------------------- 启动参数
 SERVER_NAME = os.getenv("FRONTEND_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("FRONTEND_PORT", "7860"))

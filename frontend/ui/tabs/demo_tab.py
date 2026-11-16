@@ -1,13 +1,42 @@
 """演示入口区：一键灌入 / 清空演示数据，附后端连通性自检。
 
-Day 1：界面与按钮骨架。
-Day 2：接后端健康检查；Day 6：接 POST /demo/load、POST /demo/reset。
+Day 2：接 GET /health 验证前后端连通。
+Day 6：接 POST /demo/load、POST /demo/reset。
 """
+
+import time
 
 import gradio as gr
 
-from config import API_BASE_URL
+import api
+from config import API_BASE_URL, MOCK_FALLBACK
 from ui import components as c
+
+
+def check_backend() -> str:
+    """调用健康检查，成功/失败都以提示卡展示（不抛异常）。"""
+    started = time.perf_counter()
+    try:
+        detail = api.health()
+    except api.ApiError as exc:
+        elapsed = (time.perf_counter() - started) * 1000
+        hint = (
+            "　提示：对话解析已启用本地 Mock 兜底，仍可体验界面；入库与统计需后端启动。"
+            if MOCK_FALLBACK
+            else ""
+        )
+        return c.tip(
+            f"后端未连通：{exc.message}<br>"
+            f"请求地址：{API_BASE_URL}　耗时 {elapsed:.0f} ms。{hint}",
+            kind="error",
+        )
+
+    elapsed = (time.perf_counter() - started) * 1000
+    return c.tip(
+        f"后端连通正常：{detail}<br>"
+        f"请求地址：{API_BASE_URL}　耗时 {elapsed:.0f} ms。",
+        kind="ok",
+    )
 
 
 def build_demo_tab() -> dict:
@@ -32,16 +61,16 @@ def build_demo_tab() -> dict:
         )
     )
 
-    # ---------------- 骨架阶段的占位交互（Day 2/6 替换为真实调用） ----------------
+    # ---------------- 事件绑定 ----------------
+    health_btn.click(check_backend, outputs=result_area)
+
+    # 演示数据接口随后端排期（Day 6）接入
     load_btn.click(
         lambda: c.todo_notice("演示数据 POST /demo/load", "Day 6"), outputs=result_area
     )
     reset_btn.click(
         lambda: c.todo_notice("清空演示数据 POST /demo/reset", "Day 6"),
         outputs=result_area,
-    )
-    health_btn.click(
-        lambda: c.todo_notice("后端健康检查", "Day 2"), outputs=result_area
     )
 
     return {

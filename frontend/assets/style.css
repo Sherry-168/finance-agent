@@ -366,3 +366,55 @@ footer {
     font-size: 13.5px !important;
     font-weight: 550 !important;
 }
+
+/* ------------------------------ 提示卡状态配色 ------------------------------ */
+.fa-tip.is-ok {
+    color: #0d5c3a;
+    background: #e8f7ef;
+    border-left-color: #12864f;
+}
+
+.fa-tip.is-warn {
+    color: var(--fa-warning);
+    background: var(--fa-warning-soft);
+    border-left-color: var(--fa-warning);
+}
+
+.fa-tip.is-error {
+    color: var(--fa-over);
+    background: var(--fa-over-soft);
+    border-left-color: var(--fa-over);
+}
+
+/* ------------------------------ 聊天气泡 ------------------------------ */
+/* 用户侧：品牌色实心；AI 侧：浅底描边。选择器多写几组以兼容 Gradio 版本差异 */
+.fa-chat .message.user,
+.fa-chat .message-row.user .message,
+.fa-chat .bubble.user {
+    background: var(--fa-primary) !important;
+    border: 1px solid var(--fa-primary) !important;
+    border-radius: 14px 14px 4px 14px !important;
+}
+
+.fa-chat .message.user *,
+.fa-chat .message-row.user .message *,
+.fa-chat .bubble.user * {
+    color: #ffffff !important;
+}
+
+.fa-chat .message.bot,
+.fa-chat .message-row.bot .message,
+.fa-chat .bubble.bot {
+    background: #f4f8f7 !important;
+    border: 1px solid var(--fa-border) !important;
+    border-radius: 14px 14px 14px 4px !important;
+}
+
+.fa-chat .message.bot *,
+.fa-chat .message-row.bot .message * {
+    color: var(--fa-ink) !important;
+}
+
+.fa-chat .message {
+    box-shadow: none !important;
+}

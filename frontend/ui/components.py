@@ -46,8 +46,37 @@ def section_head(title: str, desc: str = "") -> str:
     )
 
 
-def tip(text: str) -> str:
-    return f'<div class="fa-tip">{text}</div>'
+def tip(text: str, kind: str = "info") -> str:
+    """kind: info / ok / warn / error（对应 CSS 里的状态配色）。"""
+    extra = "" if kind == "info" else f" is-{kind}"
+    return f'<div class="fa-tip{extra}">{text}</div>'
+
+
+def draft_summary(draft: dict) -> str:
+    """把归一化后的草稿整理成 AI 气泡文案（不参与任何计算）。"""
+    fields = draft.get("fields") or {}
+    lines = []
+
+    amount = fields.get("amount")
+    amount_text = f"¥{amount:,.2f}" if isinstance(amount, (int, float)) else "未识别"
+    lines.append(f"金额：{amount_text}")
+    lines.append(f"类别：{fields.get('category') or '未识别'}")
+    if fields.get("merchant"):
+        lines.append(f"商户：{fields['merchant']}")
+    if fields.get("occurred_at"):
+        lines.append(f"时间：{fields['occurred_at']}")
+    if fields.get("note"):
+        lines.append(f"备注：{fields['note']}")
+
+    confidence = draft.get("confidence")
+    if isinstance(confidence, (int, float)):
+        lines.append(f"置信度：{confidence * 100:.0f}%")
+
+    missing = draft.get("missing_fields") or []
+    if missing:
+        lines.append(f"待补充字段：{'、'.join(missing)}")
+
+    return "已解析为草稿（**尚未入库**）：\n\n- " + "\n- ".join(lines) + "\n\n确认卡交互即将开放，当前草稿不会写入数据库。"
 
 
 def empty_state(title: str, desc: str) -> str:
