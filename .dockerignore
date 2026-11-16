@@ -1,0 +1,34 @@
+# 不进构建上下文，缩短构建时间并避免把本机环境带进镜像
+.git
+.gitattributes
+.gitignore
+.github
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# 密钥：只允许示例文件进镜像
+.env
+.env.*
+!.env.example
+
+# 本地数据库（数据通过 ./data 挂载，不进镜像）
+*.db
+data/*.db
+
+# 文档与测试不参与运行
+docs/
+tests/
+*.md
+
+# 编辑器 / 系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
