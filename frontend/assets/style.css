@@ -1,0 +1,420 @@
+/* ------------------------------------------------------------------
+   记账小助手 · 全局自定义样式
+   用途：Gradio 原生组件样式受限，卡片 / 进度条 / 图表容器统一用
+        gr.HTML + 本文件里的 fa-* 类承载（见《前端注意事项》第 7 条）
+   ------------------------------------------------------------------ */
+
+:root {
+    --fa-primary: #0f766e;
+    --fa-primary-dark: #0b5c56;
+    --fa-primary-soft: #e7f4f1;
+    --fa-ink: #14231f;
+    --fa-muted: #6c807c;
+    --fa-bg: #f5f8f7;
+    --fa-surface: #ffffff;
+    --fa-border: #e2eae8;
+    --fa-warning: #b45309;
+    --fa-warning-soft: #fef3c7;
+    --fa-over: #b91c1c;
+    --fa-over-soft: #fee2e2;
+    --fa-radius: 14px;
+    --fa-shadow: 0 1px 2px rgba(20, 35, 31, .04), 0 8px 24px rgba(20, 35, 31, .05);
+}
+
+/* 页面底色与字体 */
+.gradio-container {
+    background: var(--fa-bg) !important;
+    font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    max-width: 1280px !important;
+}
+
+footer {
+    display: none !important;
+}
+
+/* ------------------------------ 顶部标题区 ------------------------------ */
+.fa-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 20px 24px;
+    border-radius: var(--fa-radius);
+    background: linear-gradient(120deg, var(--fa-primary) 0%, #14807a 55%, #17a196 100%);
+    box-shadow: var(--fa-shadow);
+    color: #fff;
+}
+
+.fa-header-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    margin: 0 0 6px;
+    color: #fff;
+}
+
+.fa-header-sub {
+    font-size: 13px;
+    opacity: .9;
+    margin: 0;
+    color: #eafaf7;
+}
+
+.fa-header-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.fa-tag {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .16);
+    border: 1px solid rgba(255, 255, 255, .28);
+    color: #fff;
+    white-space: nowrap;
+}
+
+/* ------------------------------ 卡片容器 ------------------------------ */
+.fa-card {
+    background: var(--fa-surface);
+    border: 1px solid var(--fa-border);
+    border-radius: var(--fa-radius);
+    padding: 16px 18px;
+    box-shadow: var(--fa-shadow);
+}
+
+.fa-section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 2px 0 10px;
+}
+
+.fa-section-title {
+    font-size: 15px;
+    font-weight: 650;
+    color: var(--fa-ink);
+    margin: 0;
+}
+
+.fa-section-desc {
+    font-size: 12px;
+    color: var(--fa-muted);
+}
+
+/* 提示条 */
+.fa-tip {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--fa-primary-dark);
+    background: var(--fa-primary-soft);
+    border-left: 3px solid var(--fa-primary);
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+/* 空态占位 */
+.fa-empty {
+    border: 1px dashed #cfe0dd;
+    border-radius: 12px;
+    background: #fbfdfc;
+    padding: 22px 16px;
+    text-align: center;
+    color: var(--fa-muted);
+}
+
+.fa-empty-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #465956;
+    margin-bottom: 6px;
+}
+
+.fa-empty-desc {
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+/* ------------------------------ 指标卡 ------------------------------ */
+.fa-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.fa-metric {
+    background: var(--fa-surface);
+    border: 1px solid var(--fa-border);
+    border-radius: var(--fa-radius);
+    padding: 16px 18px;
+    box-shadow: var(--fa-shadow);
+}
+
+.fa-metric-label {
+    font-size: 12px;
+    color: var(--fa-muted);
+    letter-spacing: .3px;
+}
+
+.fa-metric-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--fa-primary-dark);
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+}
+
+.fa-metric-hint {
+    font-size: 11.5px;
+    color: var(--fa-muted);
+    margin-top: 4px;
+}
+
+/* ------------------------------ 图表容器 ------------------------------ */
+.fa-chart {
+    border: 1px dashed #cfe0dd;
+    border-radius: 12px;
+    background: #fbfdfc;
+    height: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--fa-muted);
+}
+
+.fa-chart-placeholder-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #465956;
+}
+
+.fa-chart-placeholder-desc {
+    font-size: 11.5px;
+}
+
+/* ------------------------------ 草稿确认卡 ------------------------------ */
+.fa-draft {
+    background: var(--fa-surface);
+    border: 1px solid var(--fa-border);
+    border-left: 4px solid var(--fa-primary);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: var(--fa-shadow);
+}
+
+.fa-draft-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.fa-draft-head-title {
+    font-size: 13.5px;
+    font-weight: 650;
+    color: var(--fa-ink);
+}
+
+.fa-badge {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--fa-primary-soft);
+    color: var(--fa-primary-dark);
+    border: 1px solid #cbe7e2;
+}
+
+.fa-field-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12.5px;
+    padding: 6px 0;
+    border-bottom: 1px dashed #eef3f2;
+}
+
+.fa-field-row:last-child {
+    border-bottom: none;
+}
+
+.fa-field-label {
+    color: var(--fa-muted);
+    white-space: nowrap;
+}
+
+.fa-field-value {
+    color: var(--fa-ink);
+    font-weight: 550;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.fa-amount {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--fa-primary-dark);
+}
+
+/* ------------------------------ 预算进度 ------------------------------ */
+.fa-budget-item {
+    border: 1px solid var(--fa-border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: var(--fa-surface);
+}
+
+.fa-budget-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--fa-ink);
+    margin-bottom: 8px;
+}
+
+.fa-budget-meta {
+    color: var(--fa-muted);
+    font-size: 11.5px;
+}
+
+.fa-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: #eef3f2;
+    overflow: hidden;
+}
+
+.fa-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--fa-primary);
+}
+
+.fa-bar-fill.is-warning {
+    background: var(--fa-warning);
+}
+
+.fa-bar-fill.is-over {
+    background: var(--fa-over);
+}
+
+.fa-budget-alert {
+    margin-top: 8px;
+    font-size: 11.5px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    display: inline-block;
+}
+
+.fa-budget-alert.is-warning {
+    color: var(--fa-warning);
+    background: var(--fa-warning-soft);
+}
+
+.fa-budget-alert.is-over {
+    color: var(--fa-over);
+    background: var(--fa-over-soft);
+}
+
+/* ------------------------------ 演示入口 ------------------------------ */
+.fa-demo-card {
+    border: 1px solid #cbe7e2;
+    border-radius: var(--fa-radius);
+    background: linear-gradient(135deg, #ffffff 0%, #f0faf8 100%);
+    padding: 18px 20px;
+    box-shadow: var(--fa-shadow);
+}
+
+.fa-demo-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--fa-primary-dark);
+    margin-bottom: 6px;
+}
+
+.fa-demo-desc {
+    font-size: 12.5px;
+    color: var(--fa-muted);
+    line-height: 1.7;
+}
+
+/* ------------------------------ Gradio 微调 ------------------------------ */
+.fa-panel {
+    background: var(--fa-surface);
+    border: 1px solid var(--fa-border);
+    border-radius: var(--fa-radius);
+    padding: 14px 16px;
+    box-shadow: var(--fa-shadow);
+}
+
+.fa-chat .message-wrap {
+    border-radius: 12px;
+}
+
+.fa-toolbar .btn {
+    min-width: 96px;
+}
+
+/* Tab 导航更清爽 */
+.tab-nav button {
+    font-size: 13.5px !important;
+    font-weight: 550 !important;
+}
+
+/* ------------------------------ 提示卡状态配色 ------------------------------ */
+.fa-tip.is-ok {
+    color: #0d5c3a;
+    background: #e8f7ef;
+    border-left-color: #12864f;
+}
+
+.fa-tip.is-warn {
+    color: var(--fa-warning);
+    background: var(--fa-warning-soft);
+    border-left-color: var(--fa-warning);
+}
+
+.fa-tip.is-error {
+    color: var(--fa-over);
+    background: var(--fa-over-soft);
+    border-left-color: var(--fa-over);
+}
+
+/* ------------------------------ 聊天气泡 ------------------------------ */
+/* 用户侧：品牌色实心；AI 侧：浅底描边。选择器多写几组以兼容 Gradio 版本差异 */
+.fa-chat .message.user,
+.fa-chat .message-row.user .message,
+.fa-chat .bubble.user {
+    background: var(--fa-primary) !important;
+    border: 1px solid var(--fa-primary) !important;
+    border-radius: 14px 14px 4px 14px !important;
+}
+
+.fa-chat .message.user *,
+.fa-chat .message-row.user .message *,
+.fa-chat .bubble.user * {
+    color: #ffffff !important;
+}
+
+.fa-chat .message.bot,
+.fa-chat .message-row.bot .message,
+.fa-chat .bubble.bot {
+    background: #f4f8f7 !important;
+    border: 1px solid var(--fa-border) !important;
+    border-radius: 14px 14px 14px 4px !important;
+}
+
+.fa-chat .message.bot *,
+.fa-chat .message-row.bot .message * {
+    color: var(--fa-ink) !important;
+}
+
+.fa-chat .message {
+    box-shadow: none !important;
+}
