@@ -38,8 +38,8 @@ def create_app() -> gr.Blocks:
                 build_chat_tab()
             with gr.Tab("明细管理", id="tab-records") as records_tab_item:
                 records_handles = build_records_tab()
-            with gr.Tab("统计图表", id="tab-stats"):
-                build_stats_tab()
+            with gr.Tab("统计图表", id="tab-stats") as stats_tab_item:
+                stats_handles = build_stats_tab()
             with gr.Tab("预算中心", id="tab-budget"):
                 build_budget_tab()
             with gr.Tab("演示入口", id="tab-demo"):
@@ -50,6 +50,12 @@ def create_app() -> gr.Blocks:
             records_handles["initial_load"],
             inputs=None,
             outputs=records_handles["list_outputs"],
+        )
+        # 首次切到统计页时自动刷新三块统计
+        stats_tab_item.select(
+            stats_handles["initial_load"],
+            inputs=None,
+            outputs=stats_handles["stats_outputs"],
         )
 
         gr.HTML(c.footer_note())

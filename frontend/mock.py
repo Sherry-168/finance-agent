@@ -238,6 +238,101 @@ def query(question: str, session_id: str) -> dict:
     }
 
 
+def _confirmed_between(start: str, end: str) -> list[dict]:
+    """统计口径（api.md §5）：仅 confirmed=1 的记录。"""
+    _seed_records()
+    return [
+        item
+        for item in _MOCK_RECORDS
+        if item["confirmed"] in (1, True, "1") and start <= item["occurred_at"] <= end
+    ]
+
+
+def _month_bounds(month: str) -> tuple[str, str]:
+    year, mon = int(month[:4]), int(month[5:7])
+    first = dt.date(year, mon, 1)
+    if mon == 12:
+        next_first = dt.date(year + 1, 1, 1)
+    else:
+        next_first = dt.date(year, mon + 1, 1)
+    return first.isoformat(), (next_first - dt.timedelta(days=1)).isoformat()
+
+
+def stats_summary(month: str) -> dict:
+    """模拟 GET /stats/summary：总额 / 笔数 / 日均（当月已过天数）。"""
+    start, end = _month_bounds(month)
+    records = _confirmed_between(start, end)
+    total = round(sum(item["amount"] for item in records), 2)
+    year, mon = int(month[:4]), int(month[5:7])
+    if mon == 12:
+        days = (dt.date(year + 1, 1, 1) - dt.date(year, 12, 1)).days
+    else:
+        days = (dt.date(year, mon + 1, 1) - dt.date(year, mon, 1)).days
+    today = dt.date.today()
+    if month == today.strftime("%Y-%m"):
+        days = min(days, today.day)
+    return {
+        "month": month,
+        "total": total,
+        "count": len(records),
+        "daily_avg": round(total / days, 2) if days else 0.0,
+    }
+
+
+def stats_by_category(
+    *, month: str | None = None, start: str | None = None, end: str | None = None
+) -> dict:
+    """模拟 GET /stats/by-category：分组总额、笔数、占比（降序）。"""
+    if start and end:
+        records = _confirmed_between(start, end)
+    else:
+        month = month or dt.date.today().strftime("%Y-%m")
+        start, end = _month_bounds(month)
+        records = _confirmed_between(start, end)
+
+    groups: dict[str, dict] = {}
+    grand = 0.0
+    for item in records:
+        bucket = groups.setdefault(item["category"], {"total": 0.0, "count": 0})
+        bucket["total"] += item["amount"]
+        bucket["count"] += 1
+        grand += item["amount"]
+
+    items = [
+        {
+            "category": name,
+            "total": round(bucket["total"], 2),
+            "count": bucket["count"],
+            "ratio": round(bucket["total"] / grand, 2) if grand else 0.0,
+        }
+        for name, bucket in sorted(
+            groups.items(), key=lambda pair: pair[1]["total"], reverse=True
+        )
+    ]
+    return {"items": items}
+
+
+def stats_trend(days: int = 30) -> dict:
+    """模拟 GET /stats/trend：近 N 天每日总额与笔数（含 0 消费日）。"""
+    days = max(1, min(int(days), 90))
+    today = dt.date.today()
+    start = (today - dt.timedelta(days=days - 1)).isoformat()
+    records = _confirmed_between(start, today.isoformat())
+    by_day: dict[str, dict] = {}
+    for item in records:
+        bucket = by_day.setdefault(item["occurred_at"], {"total": 0.0, "count": 0})
+        bucket["total"] += item["amount"]
+        bucket["count"] += 1
+    items = []
+    for offset in range(days - 1, -1, -1):
+        day = (today - dt.timedelta(days=offset)).isoformat()
+        bucket = by_day.get(day, {"total": 0.0, "count": 0})
+        items.append(
+            {"date": day, "total": round(bucket["total"], 2), "count": bucket["count"]}
+        )
+    return {"items": items}
+
+
 def demo_load() -> dict:
     return {"records": 0, "months": 0, "receipts": 0}
 
