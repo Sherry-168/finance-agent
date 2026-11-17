@@ -62,6 +62,8 @@ def request(
             files=files,
             timeout=timeout or API_TIMEOUT,
             follow_redirects=True,
+            # 后端在本地 / 内网，禁用系统代理，避免代理软件劫持 127.0.0.1 请求
+            trust_env=False,
         )
     except httpx.TimeoutException as exc:
         raise ApiError("后端响应超时，请稍后重试") from exc
