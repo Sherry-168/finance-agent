@@ -36,14 +36,21 @@ def create_app() -> gr.Blocks:
         with gr.Tabs():
             with gr.Tab("记账对话", id="tab-chat"):
                 build_chat_tab()
-            with gr.Tab("明细管理", id="tab-records"):
-                build_records_tab()
+            with gr.Tab("明细管理", id="tab-records") as records_tab_item:
+                records_handles = build_records_tab()
             with gr.Tab("统计图表", id="tab-stats"):
                 build_stats_tab()
             with gr.Tab("预算中心", id="tab-budget"):
                 build_budget_tab()
             with gr.Tab("演示入口", id="tab-demo"):
                 build_demo_tab()
+
+        # 首次切到明细页时自动加载第一页（后端未启动时降级本地演示数据）
+        records_tab_item.select(
+            records_handles["initial_load"],
+            inputs=None,
+            outputs=records_handles["list_outputs"],
+        )
 
         gr.HTML(c.footer_note())
 

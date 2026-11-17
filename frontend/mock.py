@@ -94,13 +94,138 @@ def parse_record(text: str, session_id: str) -> dict:
     }
 
 
+_MOCK_RECORDS: list[dict] = []
+_MOCK_NEXT_ID = 201
+
+
+def _seed_records() -> None:
+    """首次访问时生成确定性演示明细（金额/统计仍以后端为准）。"""
+    global _MOCK_NEXT_ID
+    if _MOCK_RECORDS:
+        return
+    today = dt.date.today()
+    samples = [
+        (32.0, "交通", "滴滴出行", "市区通勤", "text"),
+        (25.5, "餐饮", "兰州拉面", None, "text"),
+        (128.0, "购物", "优衣库", "秋季外套", "manual"),
+        (18.0, "餐饮", "瑞幸咖啡", None, "text"),
+        (1200.0, "居住", "自如", "11 月房租", "manual"),
+        (45.0, "娱乐", "万达影城", None, "text"),
+        (66.5, "医疗", "海王星辰", "感冒药", "manual"),
+        (320.0, "教育", "网易云课堂", None, "text"),
+        (58.0, "餐饮", "美团外卖", "工作餐", "text"),
+        (12.0, "交通", "地铁", None, "text"),
+        (210.0, "购物", "京东", "洗衣液", "text"),
+        (99.0, "娱乐", "腾讯视频", "季度会员", "manual"),
+        (38.0, "餐饮", "沙县小吃", None, "text"),
+        (156.0, "交通", "中石化", "加油", "manual"),
+        (7.5, "餐饮", "蜜雪冰城", None, "text"),
+        (880.0, "购物", "苹果官网", "AirPods", "manual"),
+    ]
+    for index, (amount, category, merchant, note, source) in enumerate(samples):
+        day = today - dt.timedelta(days=index % 20)
+        _MOCK_RECORDS.append(
+            {
+                "id": 100 + index,
+                "amount": amount,
+                "category": category,
+                "merchant": merchant,
+                "occurred_at": day.isoformat(),
+                "note": note,
+                "source": source,
+                "confirmed": 1,
+                "created_at": f"{day.isoformat()} 20:11:03",
+            }
+        )
+    # 一条草稿示例，用于展示「草稿 / 已确认」状态区分
+    _MOCK_RECORDS.append(
+        {
+            "id": _MOCK_NEXT_ID,
+            "amount": 66.0,
+            "category": "娱乐",
+            "merchant": None,
+            "occurred_at": today.isoformat(),
+            "note": "待确认",
+            "source": "text",
+            "confirmed": 0,
+            "created_at": f"{today.isoformat()} 21:00:00",
+        }
+    )
+    _MOCK_NEXT_ID += 1
+
+
+def list_records(
+    *,
+    start: str | None = None,
+    end: str | None = None,
+    category: str | None = None,
+    page: int = 1,
+    size: int = 10,
+) -> dict:
+    """模拟 GET /records：内存过滤 + 分页。"""
+    _seed_records()
+    items = list(_MOCK_RECORDS)
+    if start:
+        items = [item for item in items if item["occurred_at"] >= start]
+    if end:
+        items = [item for item in items if item["occurred_at"] <= end]
+    if category:
+        items = [item for item in items if item["category"] == category]
+    items.sort(key=lambda item: (item["occurred_at"], item["id"]), reverse=True)
+
+    total = len(items)
+    pages = max(1, (total + size - 1) // size)
+    page = min(max(1, page), pages)
+    begin = (page - 1) * size
+    return {
+        "items": items[begin : begin + size],
+        "total": total,
+        "page": page,
+        "size": size,
+        "pages": pages,
+    }
+
+
+def update_record(record_id: int, payload: dict) -> dict:
+    """模拟 PUT /records/{id}：返回更新后的记录。"""
+    _seed_records()
+    for item in _MOCK_RECORDS:
+        if item["id"] == record_id:
+            item.update({key: value for key, value in payload.items() if value is not None})
+            return dict(item)
+    return {"id": record_id}
+
+
+def delete_record(record_id: int) -> dict:
+    """模拟 DELETE /records/{id}。"""
+    _seed_records()
+    before = len(_MOCK_RECORDS)
+    _MOCK_RECORDS[:] = [item for item in _MOCK_RECORDS if item["id"] != record_id]
+    return {"deleted": len(_MOCK_RECORDS) < before}
+
+
 def health() -> str:
     return "Mock 模式（未连接后端）"
 
 
 def create_record(payload: dict) -> dict:
-    """模拟 POST /records：返回与后端一致的成功结构。"""
-    return {"id": 901, "confirmed": 1}
+    """模拟 POST /records：写入内存明细表并返回成功结构。"""
+    global _MOCK_NEXT_ID
+    _seed_records()
+    record = {
+        "id": _MOCK_NEXT_ID,
+        "amount": payload.get("amount") or 0.0,
+        "category": payload.get("category") or "其他",
+        "merchant": payload.get("merchant"),
+        "occurred_at": payload.get("occurred_at") or dt.date.today().isoformat(),
+        "note": payload.get("note"),
+        "source": payload.get("source") or "text",
+        "confirmed": 1,
+        "created_at": f"{dt.date.today().isoformat()} {dt.datetime.now().strftime('%H:%M:%S')}",
+    }
+    _MOCK_NEXT_ID += 1
+    _MOCK_RECORDS.append(record)
+    return {"id": record["id"], "confirmed": 1}
 
 
 def query(question: str, session_id: str) -> dict:
