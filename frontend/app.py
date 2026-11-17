@@ -14,6 +14,8 @@ Day 1 目标：搭出五区骨架，接口在 Day 2~6 逐步接入。
     Tab5 演示入口（一键灌入 / 清空演示数据）
 """
 
+import os
+
 import gradio as gr
 
 from config import APP_TITLE, SERVER_NAME, SERVER_PORT
@@ -71,6 +73,10 @@ def create_app() -> gr.Blocks:
 
 def launch() -> None:
     """启动前端服务（Gradio 6 起 theme / css 需在 launch 时传入）。"""
+    # 本机服务不走系统代理：代理软件开启时会把 localhost 自检请求劫持掉，
+    # 导致 Gradio launch 报 404（httpx 默认信任环境代理，用 NO_PROXY 豁免）。
+    os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1")
+    os.environ.setdefault("no_proxy", "localhost,127.0.0.1")
     create_app().launch(
         server_name=SERVER_NAME,
         server_port=SERVER_PORT,
