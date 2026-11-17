@@ -151,7 +151,7 @@
 
 id 不存在返回 `1002`；前端删除前需二次确认。
 
-## 3. 自然语言查账 `【待修正】`
+## 3. 自然语言查账 `【已实现】`
 
 **POST** `/query`
 
@@ -170,7 +170,7 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 
 - `slots` 由 LLM 解析，`answer_text` 由后端模板拼数字生成，**LLM 不参与算数**。
 - 前端只渲染 `answer_text` 与 `table`，`table` 为空时隐藏表格。
-- 待修正：当前实现使用 `ParseRequest`（必填 `text`）接收请求，与本文 `question` 不一致，调用会返回 422。
+- 实现进度（2026-11-17）：入参已改为 `{question, session_id}`，`slots` 已返回；LLM 槽位解析与聚合统计待接入（`answer_text` 为占位文案），接入后无需前端改动。
 
 ## 4. 统计 `【待实现】`
 
@@ -277,7 +277,7 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 |---|---|---|
 | `POST /records/parse` | 已实现 | 结构符合 v1.1；返回内容仍为 Mock 数据 |
 | `POST /records` | 已实现 | `raw_text` 必填；尚未真正入库 |
-| `POST /query` | 待修正 | 入参字段名需为 `question`，并补 `slots` |
+| `POST /query` | 已实现 | 入参 `question` + `slots` 符合契约；聚合统计待接入 |
 | `GET /records` | 待实现 | Day 4 使用 |
 | `PUT /records/{id}` | 待实现 | Day 4 使用 |
 | `DELETE /records/{id}` | 待实现 | Day 4 使用 |
