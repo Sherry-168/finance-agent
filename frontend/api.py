@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from config import API_BASE_URL, API_TIMEOUT, ERROR_MESSAGES, SUCCESS_CODE
+from config import API_BASE_URL, API_TIMEOUT, ERROR_MESSAGES, MOCK_FALLBACK, SUCCESS_CODE
 
 DRAFT_FIELDS = ("amount", "category", "merchant", "occurred_at", "note")
 MISSING_REQUIRED = ("amount", "category", "occurred_at")
@@ -29,6 +29,23 @@ class ApiError(Exception):
     @property
     def is_network_error(self) -> bool:
         return self.code is None
+
+
+def should_fallback(exc: "ApiError") -> bool:
+    """是否降级到本地 Mock 演示。
+
+    三种情况降级（MOCK_FALLBACK 开启时）：
+    - 网络层失败（后端未启动 / 超时）；
+    - 1002 资源不存在（后端在线但该接口尚未实现）；
+    - 1001 且 message 含 Method Not Allowed（GET/PUT/DELETE 与已实现的 POST 同路径
+      时，后端把 405 包装成 1001，同样属于"接口未就绪"）。
+    其他业务错误（参数错误、LLM 失败等）照常报错，不掩盖真实问题。
+    """
+    if not MOCK_FALLBACK:
+        return False
+    if exc.is_network_error or exc.code == 1002:
+        return True
+    return exc.code == 1001 and "method not allowed" in exc.message.lower()
 
 
 # ---------------------------------------------------------------- 底层请求

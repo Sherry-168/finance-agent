@@ -14,7 +14,7 @@ import gradio as gr
 
 import api
 import mock
-from config import MOCK_FALLBACK
+from config import MOCK_FALLBACK  # noqa: F401  （保留给 demo_tab 提示等场景参考）
 from ui import components as c
 
 _MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -24,7 +24,7 @@ def _fetch_summary(month: str):
     try:
         return api.stats_summary(month), ""
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             return mock.stats_summary(month), mock.NOTICE
         return None, exc.message
 
@@ -33,7 +33,7 @@ def _fetch_by_category(month: str):
     try:
         return api.stats_by_category(month=month), ""
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             return mock.stats_by_category(month=month), mock.NOTICE
         return None, exc.message
 
@@ -42,7 +42,7 @@ def _fetch_trend(days: int):
     try:
         return api.stats_trend(days=days), ""
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             return mock.stats_trend(days=days), mock.NOTICE
         return None, exc.message
 

@@ -44,8 +44,8 @@ def _parse_draft(text: str, session_id: str) -> tuple[dict | None, str]:
     try:
         return api.parse_record(text, session_id), ""
     except api.ApiError as exc:
-        # 只有网络层失败才降级 Mock；业务错误照实提示，避免掩盖后端问题
-        if exc.is_network_error and MOCK_FALLBACK:
+        # 网络失败或接口未实现（1002）才降级 Mock；其他业务错误照实提示，避免掩盖后端问题
+        if api.should_fallback(exc):
             return mock.parse_record(text, session_id), mock.NOTICE
         return None, exc.message
 
@@ -136,7 +136,7 @@ def confirm_record(draft: dict | None, amount, category, merchant, occurred_at, 
     try:
         result = api.create_record(payload)
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             result = mock.create_record(payload)
             notice = mock.NOTICE
         else:

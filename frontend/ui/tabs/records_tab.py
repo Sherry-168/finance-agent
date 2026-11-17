@@ -17,7 +17,6 @@ from config import (
     CATEGORIES,
     DEFAULT_PAGE,
     DEFAULT_PAGE_SIZE,
-    MOCK_FALLBACK,
     PAGE_SIZE_CHOICES,
 )
 from ui import components as c
@@ -59,7 +58,7 @@ def _fetch(start, end, category, page: int, size: int):
     try:
         return api.list_records(**kwargs), ""
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             return mock.list_records(**kwargs), mock.NOTICE
         return None, exc.message
 
@@ -168,7 +167,7 @@ def save_record(record_id, amount, category, merchant, occurred_at, note, start,
     try:
         api.update_record(int(record_id), payload)
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             mock.update_record(int(record_id), payload)
             notice = mock.NOTICE
         else:
@@ -193,7 +192,7 @@ def remove_record(record_id, confirm_delete, start, end, category_filter, size, 
     try:
         api.delete_record(int(record_id))
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             mock.delete_record(int(record_id))
             notice = mock.NOTICE
         else:

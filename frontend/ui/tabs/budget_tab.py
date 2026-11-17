@@ -14,7 +14,7 @@ import gradio as gr
 
 import api
 import mock
-from config import CATEGORIES, MOCK_FALLBACK, TOTAL_BUDGET_LABEL
+from config import CATEGORIES, TOTAL_BUDGET_LABEL
 from ui import components as c
 
 _MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -33,7 +33,7 @@ def _save_budget(month: str, category: str, amount):
     try:
         result = api.save_budget(payload_month, category_arg, float(amount))
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             result = mock.save_budget(payload_month, category_arg, float(amount))
             notice = mock.NOTICE
         else:
@@ -58,7 +58,7 @@ def load_alerts(month: str):
         data = api.budget_alerts(month)
         notice = ""
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             data = mock.budget_alerts(month)
             notice = mock.NOTICE
         else:

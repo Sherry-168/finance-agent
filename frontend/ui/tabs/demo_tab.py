@@ -46,7 +46,7 @@ def load_demo_data() -> str:
     try:
         result = api.demo_load()
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             result = mock.demo_load()
             notice = mock.NOTICE
         else:
@@ -70,7 +70,7 @@ def reset_demo_data(confirm: bool):
     try:
         result = api.demo_reset()
     except api.ApiError as exc:
-        if exc.is_network_error and MOCK_FALLBACK:
+        if api.should_fallback(exc):
             result = mock.demo_reset()
             notice = mock.NOTICE
         else:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 
-NOTICE = "演示模式：未连接后端，当前展示的是本地模拟数据"
+NOTICE = "演示模式：后端接口未就绪，当前展示的是本地模拟数据"
 
 _CATEGORY_KEYWORDS = {
     "餐饮": ["吃饭", "午饭", "晚饭", "早餐", "外卖", "奶茶", "咖啡", "火锅", "夜宵", "餐"],
