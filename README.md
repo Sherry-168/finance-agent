@@ -141,7 +141,7 @@ pytest tests/ -v                # 单元测试
 | 自然语言查账 `/query` | 入参已修 | 已按契约收 `question`（原实现会 422）；槽位与聚合待 Day 5 |
 | 明细 CRUD / 统计 / 预算 / 演示数据 | 待实现 | Day 4–6 |
 | 小票 OCR | 待实现 | 第二周 |
-| Docker 镜像 | 已提供 | 本机未安装 Docker，尚未实测 `docker compose up --build` |
+| Docker 镜像 | 已实测 | `docker compose up --build` 通过：backend healthy、前端 7860 可访问、`finance.db` 落在宿主机 `./data` |
 
 ## 团队分工
 
