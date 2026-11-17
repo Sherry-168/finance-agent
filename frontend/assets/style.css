@@ -230,6 +230,28 @@ footer {
     border: 1px solid #cbe7e2;
 }
 
+.fa-badge.is-ok {
+    background: #e8f7ef;
+    color: #0d5c3a;
+    border-color: #bfe6d2;
+}
+
+.fa-badge.is-warn {
+    background: var(--fa-warning-soft);
+    color: var(--fa-warning);
+    border-color: #f5d9a8;
+}
+
+.fa-missing {
+    font-size: 10.5px;
+    padding: 1px 7px;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: var(--fa-over-soft);
+    color: var(--fa-over);
+    border: 1px solid #f3c8c4;
+}
+
 .fa-field-row {
     display: flex;
     justify-content: space-between;

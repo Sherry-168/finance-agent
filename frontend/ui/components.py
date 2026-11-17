@@ -93,7 +93,7 @@ def draft_summary(draft: dict) -> str:
     if missing:
         lines.append(f"待补充字段：{'、'.join(missing)}")
 
-    return "已解析为草稿（**尚未入库**）：\n\n- " + "\n- ".join(lines) + "\n\n确认卡交互即将开放，当前草稿不会写入数据库。"
+    return "已解析为草稿（**尚未入库**）：\n\n- " + "\n- ".join(lines) + "\n\n请在右侧确认卡核对，可直接修改字段后入库。"
 
 
 def empty_state(title: str, desc: str) -> str:
@@ -158,7 +158,7 @@ def _field_row(label: str, value_html: str) -> str:
 
 
 def draft_card_placeholder() -> str:
-    """草稿确认卡骨架（Day 3 接入 /records/parse 后改为动态渲染）。"""
+    """无草稿时的占位卡。"""
     fields = "".join(
         [
             _field_row("金额", '<span class="fa-amount">¥ --</span>'),
@@ -178,10 +178,61 @@ def draft_card_placeholder() -> str:
       {fields}
     </div>
     <div class="fa-tip" style="margin-top:10px">
-      解析只生成草稿，点击「确认入库」才会写入；信息不全时先以反问气泡继续对话。
-      确认与修改按钮于 Day 3 接入。
+      在左侧输入一句话生成草稿；解析只生成草稿，点击「确认入库」才会写入数据库。
     </div>
     """
+
+
+def draft_card(draft: dict) -> str:
+    """渲染归一化后的草稿确认卡（只读展示，修改走下方表单）。"""
+    fields = draft.get("fields") or {}
+    missing = draft.get("missing_fields") or []
+
+    def missing_mark(key: str) -> str:
+        return ' <span class="fa-missing">待补充</span>' if key in missing else ""
+
+    amount = fields.get("amount")
+    amount_html = f'<span class="fa-amount">{format_yuan(amount)}</span>' if amount is not None else "待补充"
+    rows = "".join(
+        [
+            _field_row("金额", amount_html + missing_mark("amount")),
+            _field_row("类别", f"{fields.get('category') or '待补充'}" + missing_mark("category")),
+            _field_row("商户", fields.get("merchant") or "—"),
+            _field_row("消费时间", f"{fields.get('occurred_at') or '待补充'}" + missing_mark("occurred_at")),
+            _field_row("备注", fields.get("note") or "—"),
+        ]
+    )
+
+    confidence = draft.get("confidence")
+    conf_html = format_ratio(confidence) if isinstance(confidence, (int, float)) else "--"
+    rows += _field_row("置信度", conf_html)
+
+    badge = "fa-badge is-ok" if not missing else "fa-badge is-warn"
+    badge_text = "槽位齐全" if not missing else "待补充"
+    draft_id = draft.get("draft_id")
+    title = f"草稿确认卡{f' · {draft_id}' if draft_id else ''}"
+
+    return f"""
+    <div class="fa-draft">
+      <div class="fa-draft-head">
+        <span class="fa-draft-head-title">{title}</span>
+        <span class="{badge}">{badge_text}</span>
+      </div>
+      {rows}
+    </div>
+    <div class="fa-tip" style="margin-top:10px">
+      解析只生成草稿（不入库）。信息不全时继续在左侧对话补充；
+      字段有误可直接在下方表单修改后确认。
+    </div>
+    """
+
+
+def created_card(record_id, notice: str = "") -> str:
+    """确认入库成功后的提示卡。"""
+    text = f"已确认入库：记录 id {record_id}（confirmed=1）。明细页稍后可查看（Day 4 接入列表）。"
+    if notice:
+        text += f"<br><br>{notice}"
+    return tip(text, kind="ok")
 
 
 # ------------------------------------------------------------------ 预算卡

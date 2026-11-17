@@ -98,6 +98,11 @@ def health() -> str:
     return "Mock 模式（未连接后端）"
 
 
+def create_record(payload: dict) -> dict:
+    """模拟 POST /records：返回与后端一致的成功结构。"""
+    return {"id": 901, "confirmed": 1}
+
+
 def query(question: str, session_id: str) -> dict:
     """模拟 POST /query：仅用于气泡流自测，数字不是真实统计。"""
     return {
