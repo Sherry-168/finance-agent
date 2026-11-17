@@ -40,8 +40,8 @@ def create_app() -> gr.Blocks:
                 records_handles = build_records_tab()
             with gr.Tab("统计图表", id="tab-stats") as stats_tab_item:
                 stats_handles = build_stats_tab()
-            with gr.Tab("预算中心", id="tab-budget"):
-                build_budget_tab()
+            with gr.Tab("预算中心", id="tab-budget") as budget_tab_item:
+                budget_handles = build_budget_tab()
             with gr.Tab("演示入口", id="tab-demo"):
                 build_demo_tab()
 
@@ -56,6 +56,12 @@ def create_app() -> gr.Blocks:
             stats_handles["initial_load"],
             inputs=None,
             outputs=stats_handles["stats_outputs"],
+        )
+        # 首次切到预算页时自动加载预警进度
+        budget_tab_item.select(
+            budget_handles["initial_load"],
+            inputs=None,
+            outputs=budget_handles["progress_output"],
         )
 
         gr.HTML(c.footer_note())

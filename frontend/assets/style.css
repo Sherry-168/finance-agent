@@ -242,6 +242,12 @@ footer {
     border-color: #f5d9a8;
 }
 
+.fa-badge.is-over {
+    background: var(--fa-over-soft);
+    color: var(--fa-over);
+    border-color: #f3c8c4;
+}
+
 .fa-missing {
     font-size: 10.5px;
     padding: 1px 7px;

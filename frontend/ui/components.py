@@ -138,6 +138,51 @@ def metric_cards(items: list[tuple[str, str, str]]) -> str:
 # ------------------------------------------------------------------ 图表容器
 
 
+def budget_progress(items: list, notice: str = "") -> str:
+    """渲染预算预警列表：used_ratio / status 完全取后端（§6 契约）。
+
+    状态 → 样式：normal 正常 / warning ≥80% 预警 / over ≥100% 超支。
+    """
+    rows = []
+    for item in items:
+        name = item.get("category") or "总预算"
+        amount = item.get("amount")
+        used = item.get("used")
+        ratio = item.get("used_ratio")
+        status = item.get("status")
+        if status not in ("normal", "warning", "over"):
+            if isinstance(ratio, (int, float)):
+                status = "over" if ratio >= 1 else ("warning" if ratio >= 0.8 else "normal")
+            else:
+                status = "normal"
+
+        meta = f"{format_yuan(used)} / {format_yuan(amount)}"
+        pct = round(float(ratio) * 100, 1) if isinstance(ratio, (int, float)) else 0
+        width = min(max(pct, 2.0), 100.0)
+        if status == "over":
+            over = (float(used) - float(amount)) if isinstance(used, (int, float)) and isinstance(amount, (int, float)) else None
+            alert = f"已超支 {format_yuan(over)}，尽快控制消费" if over and over > 0 else "已超出预算，尽快控制消费"
+        elif status == "warning":
+            alert = f"已用 {format_ratio(ratio)}，接近预算上限"
+        else:
+            alert = f"已用 {format_ratio(ratio)}，额度充足"
+        rows.append(
+            f"""
+        <div class="fa-budget-item">
+          <div class="fa-budget-top">
+            <span>{name}　<span class="fa-badge{' is-ok' if status == 'normal' else (' is-warn' if status == 'warning' else ' is-over')}">{status}</span></span>
+            <span class="fa-budget-meta">{meta}</span>
+          </div>
+          <div class="fa-bar"><div class="fa-bar-fill is-{status}" style="width:{width}%"></div></div>
+          <div class="fa-budget-alert is-{status}">{alert}</div>
+        </div>
+        """
+        )
+    body = "".join(rows) or '<div class="fa-empty" style="padding:24px 0;text-align:center;opacity:.65">本月暂未设定预算</div>'
+    notice_html = f"<br><i style='opacity:.7'>{notice}</i>" if notice else ""
+    return body + f'<div class="fa-tip" style="margin-top:10px">已用 ≥80% 预警、≥100% 超支；使用率由后端聚合（仅已确认记录）。{notice_html}</div>'
+
+
 def chart_placeholder(chart_id: str, title: str, desc: str) -> str:
     """ECharts 挂载点：Day 5 用 gr.HTML 注入图表脚本填充该容器。"""
     return (

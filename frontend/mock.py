@@ -96,13 +96,18 @@ def parse_record(text: str, session_id: str) -> dict:
 
 _MOCK_RECORDS: list[dict] = []
 _MOCK_NEXT_ID = 201
+_MOCK_SEEDED = False
 
 
 def _seed_records() -> None:
-    """首次访问时生成确定性演示明细（金额/统计仍以后端为准）。"""
-    global _MOCK_NEXT_ID
-    if _MOCK_RECORDS:
+    """首次访问时生成确定性演示明细（金额/统计仍以后端为准）。
+
+    每个进程只 seed 一次；demo_reset 清空后不再自动复活，保证清空语义真实。
+    """
+    global _MOCK_NEXT_ID, _MOCK_SEEDED
+    if _MOCK_SEEDED:
         return
+    _MOCK_SEEDED = True
     today = dt.date.today()
     samples = [
         (32.0, "交通", "滴滴出行", "市区通勤", "text"),
@@ -333,9 +338,146 @@ def stats_trend(days: int = 30) -> dict:
     return {"items": items}
 
 
+# ---------------------------------------------------------------- 预算 / 类别 / 演示数据
+
+_MOCK_BUDGETS: dict[tuple, float] = {}  # key: (month, category or "__total__")
+_TOTAL_KEY = "__total__"
+_BUDGETS_SEEDED = False
+
+
+def _seed_budgets() -> None:
+    """种子预算：刻意覆盖 normal / warning / over 三种状态，便于演示。
+
+    与明细一样每个进程只 seed 一次，demo_reset 清空后不再复活。
+    """
+    global _BUDGETS_SEEDED
+    if _BUDGETS_SEEDED:
+        return
+    _BUDGETS_SEEDED = True
+    _seed_records()
+    month = dt.date.today().strftime("%Y-%m")
+    _MOCK_BUDGETS[(month, _TOTAL_KEY)] = 4000.0  # 总预算 → ~82% warning
+    _MOCK_BUDGETS[(month, "餐饮")] = 1200.0      # → ~12% normal
+    _MOCK_BUDGETS[(month, "交通")] = 500.0       # → ~40% normal
+    _MOCK_BUDGETS[(month, "娱乐")] = 100.0       # → 144% over
+
+
+def list_budgets(month: str) -> dict:
+    """模拟 GET /budgets：当月预算列表（category 为 null 表示总预算）。"""
+    _seed_budgets()
+    items = []
+    for (budget_month, category), amount in _MOCK_BUDGETS.items():
+        if budget_month != month:
+            continue
+        items.append(
+            {"month": month, "category": None if category == _TOTAL_KEY else category, "amount": amount}
+        )
+    return {"items": items}
+
+
+def save_budget(month: str, category: str | None, amount: float) -> dict:
+    """模拟 POST /budgets：同月同维度覆盖。"""
+    _seed_budgets()
+    key = (month, _TOTAL_KEY if category in (None, "", "全部") else category)
+    _MOCK_BUDGETS[key] = float(amount)
+    return {"month": month, "category": category, "amount": float(amount)}
+
+
+def budget_alerts(month: str) -> dict:
+    """模拟 GET /budgets/alerts：used_ratio 与状态由聚合计算（confirmed=1 口径）。"""
+    _seed_budgets()
+    start, end = _month_bounds(month)
+    records = _confirmed_between(start, end)
+    used_by_cat: dict[str | None, float] = {}
+    for item in records:
+        used_by_cat[item["category"]] = used_by_cat.get(item["category"], 0.0) + item["amount"]
+
+    items = []
+    for (budget_month, category), amount in sorted(_MOCK_BUDGETS.items()):
+        if budget_month != month or amount <= 0:
+            continue
+        if category == _TOTAL_KEY:
+            used = round(sum(used_by_cat.values()), 2)
+        else:
+            used = round(used_by_cat.get(category, 0.0), 2)
+        ratio = round(used / amount, 2)
+        status = "over" if ratio >= 1 else ("warning" if ratio >= 0.8 else "normal")
+        items.append(
+            {
+                "month": month,
+                "category": None if category == _TOTAL_KEY else category,
+                "amount": amount,
+                "used": used,
+                "used_ratio": ratio,
+                "status": status,
+            }
+        )
+    return {"items": items}
+
+
+def list_categories() -> list[str]:
+    """模拟 GET /categories：固定 8 类。"""
+    return [
+        "餐饮", "交通", "购物", "居住", "娱乐", "医疗", "教育", "其他",
+    ]
+
+
 def demo_load() -> dict:
-    return {"records": 0, "months": 0, "receipts": 0}
+    """模拟 POST /demo/load：追加两个月的演示明细并布置预算。"""
+    global _MOCK_NEXT_ID
+    _seed_records()
+    _seed_budgets()
+    today = dt.date.today()
+    added = 0
+    # 上个月：铺底数据，保证趋势图跨月
+    for offset, (amount, category, merchant) in enumerate(
+        [
+            (18.5, "餐饮", "瑞幸"), (42.0, "餐饮", "外卖"), (9.9, "交通", "公交"),
+            (256.0, "购物", "天猫"), (13.0, "餐饮", "食堂"), (320.0, "娱乐", "剧本杀"),
+        ]
+    ):
+        day = today.replace(day=1) - dt.timedelta(days=offset + 1)
+        _MOCK_RECORDS.append(
+            {
+                "id": _MOCK_NEXT_ID,
+                "amount": amount,
+                "category": category,
+                "merchant": merchant,
+                "occurred_at": day.isoformat(),
+                "note": None,
+                "source": "manual",
+                "confirmed": 1,
+                "created_at": f"{day.isoformat()} 19:00:00",
+            }
+        )
+        _MOCK_NEXT_ID += 1
+        added += 1
+    # 当月娱乐追加，放大超支演示点
+    for amount, category, merchant in [(128.0, "娱乐", "KTV"), (56.0, "娱乐", "游戏充值")]:
+        _MOCK_RECORDS.append(
+            {
+                "id": _MOCK_NEXT_ID,
+                "amount": amount,
+                "category": category,
+                "merchant": merchant,
+                "occurred_at": today.isoformat(),
+                "note": "演示",
+                "source": "text",
+                "confirmed": 1,
+                "created_at": f"{today.isoformat()} 20:00:00",
+            }
+        )
+        _MOCK_NEXT_ID += 1
+        added += 1
+    return {"records": added, "months": 2, "receipts": 3}
 
 
 def demo_reset() -> dict:
-    return {"deleted_records": 0, "deleted_budgets": 0}
+    """模拟 POST /demo/reset：清空演示明细与预算。"""
+    records = len(_MOCK_RECORDS)
+    budgets = len(_MOCK_BUDGETS)
+    _MOCK_RECORDS.clear()
+    _MOCK_BUDGETS.clear()
+    global _MOCK_NEXT_ID
+    _MOCK_NEXT_ID = 201
+    return {"deleted_records": records, "deleted_budgets": budgets}
