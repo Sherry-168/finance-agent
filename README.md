@@ -92,6 +92,9 @@ docker compose up --build
 > **数据持久化**：`docker-compose.yml` 用**目录挂载**（宿主 `./data` ⇄ 容器 `/app/data`），数据库文件为容器内 `/app/data/finance.db`，容器重建、镜像升级都不丢数据。
 > 由于是绑定挂载，`docker compose down -v` **不会**删除数据；要清空数据请删除宿主 `data/finance.db`，或在界面「演示数据」页点击「清空演示数据」（等价于调用 `POST /demo/reset`）。
 > 端口：后端 `8000`、前端 `7860`，均由 compose 显式声明。
+>
+> 已实测（Windows 11 + Docker Desktop 29.9.3）：`docker compose up --build` 后 backend 状态 `healthy`、前端 `7860` 返回 200、`/api/v1/stats/summary` 等接口返回真实数据；容器重建后 `./data/finance.db` 中的流水与预算仍在。
+> pip 默认走清华镜像（`Dockerfile` 的 `PIP_INDEX_URL` 构建参数），国内网络下构建约 45 分钟（其中 apt 源 12 分钟）；网络较好时数分钟即可。
 
 ### 本地开发（不使用 Docker）
 
@@ -187,6 +190,8 @@ pytest tests -q            # 数据层 / 规则层 / 解析规则 / 查账槽位
 
 python scripts/smoke_api.py   # 需先启动后端：按前端客户端的调用方式跑一遍全部接口，
                               # 并用前端渲染函数消费返回字段，验证前后端无字段错位
+
+docker compose exec backend python -m pytest tests -q   # 镜像内已包含 tests/，容器内同样可自检
 ```
 
 ## 9. 团队分工（Team Division）
