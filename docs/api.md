@@ -111,7 +111,7 @@
 
 多商品小票返回多条 `drafts`，用户可勾选部分入库（逐条调 `POST /records`）。
 
-### 2.4 明细列表 `【待实现】`
+### 2.4 明细列表 `【已实现】`
 
 **GET** `/records?start=&end=&category=&page=&size=`
 
@@ -130,7 +130,7 @@
 
 `confirmed`：`0` 草稿 / `1` 已确认，前端表格中区分展示。
 
-### 2.5 修正记录 `【待实现】`
+### 2.5 修正记录 `【已实现】`
 
 **PUT** `/records/{id}`
 
@@ -141,7 +141,7 @@
 
 响应返回更新后的记录对象；id 不存在返回 `1002`。
 
-### 2.6 删除记录 `【待实现】`
+### 2.6 删除记录 `【已实现】`
 
 **DELETE** `/records/{id}`
 
@@ -275,12 +275,12 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 
 | 接口 | 状态 | 备注 |
 |---|---|---|
-| `POST /records/parse` | 已实现 | 结构符合 v1.1；返回内容仍为 Mock 数据 |
-| `POST /records` | 已实现 | `raw_text` 必填；尚未真正入库 |
+| `POST /records/parse` | 已实现 | 解析接缝：有 Key 走 LLM，无 Key 走规则兜底；缺金额/时间返回 `clarify_question` |
+| `POST /records` | 已实现 | 真正落库，返回自增 id（`raw_text` 必填） |
 | `POST /query` | 已实现 | 入参 `question` + `slots` 符合契约；聚合统计待接入 |
-| `GET /records` | 待实现 | Day 4 使用 |
-| `PUT /records/{id}` | 待实现 | Day 4 使用 |
-| `DELETE /records/{id}` | 待实现 | Day 4 使用 |
+| `GET /records` | 已实现 | 分页 + 时间/类别筛选，金额按「元」返回 |
+| `PUT /records/{id}` | 已实现 | 只更新传入字段；不存在返回 1002 |
+| `DELETE /records/{id}` | 已实现 | 物理删除；不存在返回 1002 |
 | `GET /stats/summary` | 待实现 | Day 5 使用 |
 | `GET /stats/by-category` | 待实现 | Day 5 使用 |
 | `GET /stats/trend` | 待实现 | Day 5 使用 |

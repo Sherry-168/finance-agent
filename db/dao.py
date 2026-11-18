@@ -253,3 +253,42 @@ def _month_range(month: str) -> tuple[str, str]:
     else:
         end = f"{y}-{m + 1:02d}-01"
     return f"{month}-01", end
+
+
+def get_record(
+    conn: sqlite3.Connection,
+    record_id: int,
+    user_id: str = DEFAULT_USER,
+) -> dict[str, Any] | None:
+    """按 id 取单条流水，不存在返回 None（供 PUT/DELETE 校验存在性）。"""
+    row = conn.execute(
+        "SELECT * FROM records WHERE id = ? AND user_id = ?",
+        (int(record_id), user_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def count_records(
+    conn: sqlite3.Connection,
+    start: str | None = None,
+    end: str | None = None,
+    category: str | None = None,
+    confirmed: int | None = None,
+    user_id: str = DEFAULT_USER,
+) -> int:
+    """统计符合筛选条件的条数，口径与 query_records 完全一致（供分页 total/pages）。"""
+    sql = "SELECT COUNT(*) AS total FROM records WHERE user_id = ?"
+    args: list[Any] = [user_id]
+    if start:
+        sql += " AND occurred_at >= ?"
+        args.append(start)
+    if end:
+        sql += " AND occurred_at < ?"
+        args.append(end)
+    if category:
+        sql += " AND category = ?"
+        args.append(category)
+    if confirmed is not None:
+        sql += " AND confirmed = ?"
+        args.append(int(confirmed))
+    return int(conn.execute(sql, args).fetchone()["total"])
