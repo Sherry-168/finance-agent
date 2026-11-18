@@ -40,7 +40,8 @@ RUN mkdir -p /app/data
 
 EXPOSE 8000 7860
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"
+# 健康检查不写在镜像里：本镜像被两个服务复用，探针端口各不相同
+# （backend 探 8000，frontend 跑 7860）。写死在此会让前端容器永远显示 unhealthy，
+# 因此统一在 docker-compose.yml 的 backend 服务内声明。
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

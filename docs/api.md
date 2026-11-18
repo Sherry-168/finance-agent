@@ -111,7 +111,7 @@
 
 多商品小票返回多条 `drafts`，用户可勾选部分入库（逐条调 `POST /records`）。
 
-### 2.4 明细列表 `【待实现】`
+### 2.4 明细列表 `【已实现】`
 
 **GET** `/records?start=&end=&category=&page=&size=`
 
@@ -130,7 +130,7 @@
 
 `confirmed`：`0` 草稿 / `1` 已确认，前端表格中区分展示。
 
-### 2.5 修正记录 `【待实现】`
+### 2.5 修正记录 `【已实现】`
 
 **PUT** `/records/{id}`
 
@@ -141,7 +141,7 @@
 
 响应返回更新后的记录对象；id 不存在返回 `1002`。
 
-### 2.6 删除记录 `【待实现】`
+### 2.6 删除记录 `【已实现】`
 
 **DELETE** `/records/{id}`
 
@@ -170,9 +170,9 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 
 - `slots` 由 LLM 解析，`answer_text` 由后端模板拼数字生成，**LLM 不参与算数**。
 - 前端只渲染 `answer_text` 与 `table`，`table` 为空时隐藏表格。
-- 实现进度（2026-11-17）：入参已改为 `{question, session_id}`，`slots` 已返回；LLM 槽位解析与聚合统计待接入（`answer_text` 为占位文案），接入后无需前端改动。
+- 实现进度（2026-11-18）：槽位抽取（`logic/query_parser.extract_slots`）+ 真实聚合已接入，`answer_text` 与 `table` 均由数据库计算得出；LLM 不参与算数，仅在有 Key 时辅助解析。
 
-## 4. 统计 `【待实现】`
+## 4. 统计 `【已实现】`
 
 ### 4.1 月度概览
 
@@ -205,7 +205,7 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 
 统计口径：**仅统计 `confirmed=1`** 的记录，草稿不计入。
 
-## 5. 预算 `【待实现】`
+## 5. 预算 `【已实现】`
 
 ### 5.1 设定预算
 
@@ -241,7 +241,7 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 - `status`：`normal` / `warning`（`used_ratio` ≥ 0.8）/ `over`（`used_ratio` ≥ 1.0），判断由后端完成。
 - `category` 为 `null` 表示总预算项。
 
-## 6. 类别枚举 `【待实现】`
+## 6. 类别枚举 `【已实现】`
 
 **GET** `/categories`
 
@@ -249,7 +249,7 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 { "code": 0, "message": "ok", "data": { "items": ["餐饮", "交通", "购物", "居住", "娱乐", "医疗", "教育", "其他"] } }
 ```
 
-## 7. 演示数据 `【待实现】`
+## 7. 演示数据 `【已实现】`
 
 **POST** `/demo/load`
 
@@ -275,21 +275,21 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 
 | 接口 | 状态 | 备注 |
 |---|---|---|
-| `POST /records/parse` | 已实现 | 结构符合 v1.1；返回内容仍为 Mock 数据 |
-| `POST /records` | 已实现 | `raw_text` 必填；尚未真正入库 |
-| `POST /query` | 已实现 | 入参 `question` + `slots` 符合契约；聚合统计待接入 |
-| `GET /records` | 待实现 | Day 4 使用 |
-| `PUT /records/{id}` | 待实现 | Day 4 使用 |
-| `DELETE /records/{id}` | 待实现 | Day 4 使用 |
-| `GET /stats/summary` | 待实现 | Day 5 使用 |
-| `GET /stats/by-category` | 待实现 | Day 5 使用 |
-| `GET /stats/trend` | 待实现 | Day 5 使用 |
-| `POST /budgets` | 待实现 | Day 6 使用 |
-| `GET /budgets` | 待实现 | Day 6 使用 |
-| `GET /budgets/alerts` | 待实现 | Day 6 使用 |
-| `GET /categories` | 待实现 | Day 6 使用 |
-| `POST /demo/load` | 待实现 | Day 6 使用 |
-| `POST /demo/reset` | 待实现 | Day 6 使用 |
+| `POST /records/parse` | 已实现 | 解析接缝：有 Key 走 LLM，无 Key 走规则兜底；缺金额/时间返回 `clarify_question` |
+| `POST /records` | 已实现 | 真正落库，返回自增 id（`raw_text` 必填） |
+| `POST /query` | 已实现 | 槽位抽取 + 真实聚合；时间/类别解析不到时兜底「本月」并回显 `slots` |
+| `GET /records` | 已实现 | 分页 + 时间/类别筛选，金额按「元」返回 |
+| `PUT /records/{id}` | 已实现 | 只更新传入字段；不存在返回 1002 |
+| `DELETE /records/{id}` | 已实现 | 物理删除；不存在返回 1002 |
+| `GET /stats/summary` | 已实现 | 日均分母按当月已过天数计算（历史月取整月） |
+| `GET /stats/by-category` | 已实现 | ratio 0~1 两位小数，按金额降序 |
+| `GET /stats/trend` | 已实现 | days 1~90，无消费日期补 0 |
+| `POST /budgets` | 已实现 | 同月同维度覆盖；非法月份/类别返回 1001 |
+| `GET /budgets` | 已实现 | `category=null` 为总额预算 |
+| `GET /budgets/alerts` | 已实现 | 状态由后端判定（0.8 预警 / 1.0 超支） |
+| `GET /categories` | 已实现 | 直接读词典文件，不受库状态影响 |
+| `POST /demo/load` | 已实现 | 幂等：已有演示数据不重复导入；同时布置 4 条演示预算 |
+| `POST /demo/reset` | 已实现 | 清空该用户流水与预算，返回删除条数 |
 | `POST /records/ocr` | 待实现 | 第二周接入 |
 | `GET /health` | 已实现 | 前后端连通性检查 |
 

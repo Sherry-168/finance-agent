@@ -83,3 +83,92 @@ def resolve_time_range(expr: str, today: date | None = None) -> tuple[str, str]:
     # 兜底：视为本月
     start = date(y, m, 1)
     return _d(start), _d(_next_month(start))
+
+
+# ---------------------------------------------------------------- 槽位抽取
+
+# 口语别名 → 8 类规范名（模型不可用时由本表兜底，模型可用时也用它校验）
+CATEGORY_ALIASES: dict[str, str] = {
+    "吃饭": "餐饮",
+    "饮食": "餐饮",
+    "餐饮": "餐饮",
+    "外卖": "餐饮",
+    "聚餐": "餐饮",
+    "打车": "交通",
+    "出行": "交通",
+    "交通": "交通",
+    "地铁": "交通",
+    "加油": "交通",
+    "购物": "购物",
+    "网购": "购物",
+    "买东西": "购物",
+    "房租": "居住",
+    "居住": "居住",
+    "水电": "居住",
+    "娱乐": "娱乐",
+    "看电影": "娱乐",
+    "看病": "医疗",
+    "买药": "医疗",
+    "医疗": "医疗",
+    "学习": "教育",
+    "培训": "教育",
+    "教育": "教育",
+}
+
+# 时间表达：按「长词优先」排列，避免「上个月」被「个月」抢先命中
+_TIME_PATTERNS: list[tuple[str, str]] = [
+    (r"上个月|上月|上一个月", "上月"),
+    (r"这个月|本月|这一个月", "本月"),
+    (r"上个星期|上个礼拜|上周", "上周"),
+    (r"这个星期|这个礼拜|这周|本周", "本周"),
+    (r"去年", "去年"),
+    (r"今年", "今年"),
+    (r"前天", "前天"),
+    (r"昨天|昨日", "昨天"),
+    (r"今天|今日", "今天"),
+]
+
+_TOP_HINTS = ("最多", "哪类", "哪一类", "哪个类别", "占比", "比重", "排行", "排名")
+_TREND_HINTS = ("趋势", "每天", "每日", "走势", "按天")
+
+
+def extract_slots(question: str, today: date | None = None) -> dict:
+    """从自然语言问题抽取查账槽位（时间 / 类别 / 聚合方式）。
+
+    返回 {time_expr, start, end, categories, agg, group_by}，其中 start/end 左闭右开。
+    时间识别不到时兜底「本月」，并把兜底写进 time_expr，便于前端提示用户。
+    """
+    today = today or date.today()
+    text = question or ""
+    time_expr = "本月"
+    for pattern, expr in _TIME_PATTERNS:
+        if re.search(pattern, text):
+            time_expr = expr
+            break
+    else:
+        mch = re.search(r"(?:近|最近)\s*(\d+)\s*天", text)
+        if mch:
+            time_expr = f"近{int(mch.group(1))}天"
+        else:
+            mch = re.search(r"(?:近|最近)\s*(\d+)\s*个?月", text)
+            if mch:
+                time_expr = f"近{int(mch.group(1))}个月"
+
+    categories = sorted({name for alias, name in CATEGORY_ALIASES.items() if alias in text})
+
+    if any(hint in text for hint in _TREND_HINTS):
+        agg, group_by = "trend", "date"
+    elif any(hint in text for hint in _TOP_HINTS):
+        agg, group_by = "top", "category"
+    else:
+        agg, group_by = "sum", None
+
+    start, end = resolve_time_range(time_expr, today)
+    return {
+        "time_expr": time_expr,
+        "start": start,
+        "end": end,
+        "categories": categories,
+        "agg": agg,
+        "group_by": group_by,
+    }

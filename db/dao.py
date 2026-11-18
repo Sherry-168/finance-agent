@@ -253,3 +253,90 @@ def _month_range(month: str) -> tuple[str, str]:
     else:
         end = f"{y}-{m + 1:02d}-01"
     return f"{month}-01", end
+
+
+def get_record(
+    conn: sqlite3.Connection,
+    record_id: int,
+    user_id: str = DEFAULT_USER,
+) -> dict[str, Any] | None:
+    """按 id 取单条流水，不存在返回 None（供 PUT/DELETE 校验存在性）。"""
+    row = conn.execute(
+        "SELECT * FROM records WHERE id = ? AND user_id = ?",
+        (int(record_id), user_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_budgets(
+    conn: sqlite3.Connection,
+    month: str,
+    user_id: str = DEFAULT_USER,
+) -> list[dict[str, Any]]:
+    """返回该月全部预算（category 空串表示总额预算，调用方自行转 None）。"""
+    rows = conn.execute(
+        "SELECT id, category, month, amount_cents FROM budgets "
+        "WHERE user_id = ? AND month = ? ORDER BY category = '' DESC, id",
+        (user_id, month),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_budget_row(
+    conn: sqlite3.Connection,
+    month: str,
+    category: str | None = None,
+    user_id: str = DEFAULT_USER,
+) -> dict[str, Any] | None:
+    """取单条预算（含 id），未设置返回 None。"""
+    row = conn.execute(
+        "SELECT id, category, month, amount_cents FROM budgets "
+        "WHERE user_id = ? AND month = ? AND category = ?",
+        (user_id, month, category or ""),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_all_records(conn: sqlite3.Connection, user_id: str = DEFAULT_USER) -> int:
+    """清空该用户全部流水，返回删除条数（演示数据重置用）。"""
+    total = count_records(conn, user_id=user_id)
+    conn.execute("DELETE FROM records WHERE user_id = ?", (user_id,))
+    conn.commit()
+    return total
+
+
+def delete_all_budgets(conn: sqlite3.Connection, user_id: str = DEFAULT_USER) -> int:
+    """清空该用户全部预算，返回删除条数（演示数据重置用）。"""
+    total = int(
+        conn.execute("SELECT COUNT(*) AS n FROM budgets WHERE user_id = ?", (user_id,))
+        .fetchone()["n"]
+    )
+    conn.execute("DELETE FROM budgets WHERE user_id = ?", (user_id,))
+    conn.commit()
+    return total
+
+
+def count_records(
+    conn: sqlite3.Connection,
+    start: str | None = None,
+    end: str | None = None,
+    category: str | None = None,
+    confirmed: int | None = None,
+    user_id: str = DEFAULT_USER,
+) -> int:
+    """统计符合筛选条件的条数，口径与 query_records 完全一致（供分页 total/pages）。"""
+    sql = "SELECT COUNT(*) AS total FROM records WHERE user_id = ?"
+    args: list[Any] = [user_id]
+    if start:
+        sql += " AND occurred_at >= ?"
+        args.append(start)
+    if end:
+        sql += " AND occurred_at < ?"
+        args.append(end)
+    if category:
+        sql += " AND category = ?"
+        args.append(category)
+    if confirmed is not None:
+        sql += " AND confirmed = ?"
+        args.append(int(confirmed))
+    return int(conn.execute(sql, args).fetchone()["total"])

@@ -55,13 +55,14 @@ finance-agent/
 ├── app/                    # 后端应用（FastAPI）
 │   ├── main.py             # 应用装配：生命周期建库、全局异常处理、路由注册
 │   ├── core/               # 基础设施：配置、响应包装、数据库连接
-│   └── routers/            # HTTP 路由：health / records / query
+│   ├── adapters/           # 解析接缝层（规则解析 / LLM 解析，对外统一 parse_text）
+│   └── routers/            # HTTP 路由：health / records / query / stats / budgets / meta / demo
 ├── db/                     # 数据层：建表 SQL + DAO
-├── logic/                  # 规则层：金额换算、分类词典、统计、预算（纯函数）
+├── logic/                  # 规则层：金额换算、分类词典、统计、预算、查账槽位（纯函数）
 ├── frontend/               # Gradio 前端（api 客户端 / ui 组件 / Tab）
 ├── scripts/                # 演示数据导入、自检脚本
-├── tests/                  # pytest 用例（数据层与规则层）
-├── docs/                   # 接口契约、数据库设计、评审问题清单
+├── tests/                  # pytest 用例（数据层、规则层、解析与槽位）
+├── docs/                   # 接口契约、数据库设计、Prompt 说明、评审问题清单
 ├── data/                   # SQLite 文件与示例账单（容器内挂载为数据卷）
 ├── Dockerfile
 ├── docker-compose.yml
@@ -88,7 +89,9 @@ docker compose up --build
 * **后端健康检查**：http://localhost:8000/api/v1/health
 * **后端接口文档**：http://localhost:8000/docs
 
-> 数据持久化：项目使用 Docker 命名卷挂载 SQLite 数据文件，执行 `docker compose down` 后数据不会丢失；如需清空数据卷请执行 `docker compose down -v`。
+> **数据持久化**：`docker-compose.yml` 用**目录挂载**（宿主 `./data` ⇄ 容器 `/app/data`），数据库文件为容器内 `/app/data/finance.db`，容器重建、镜像升级都不丢数据。
+> 由于是绑定挂载，`docker compose down -v` **不会**删除数据；要清空数据请删除宿主 `data/finance.db`，或在界面「演示数据」页点击「清空演示数据」（等价于调用 `POST /demo/reset`）。
+> 端口：后端 `8000`、前端 `7860`，均由 compose 显式声明。
 
 ### 本地开发（不使用 Docker）
 
@@ -111,10 +114,16 @@ cd frontend && python app.py
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| LLM_API_KEY | 空 | Dify 接口或大模型 API 密钥 |
+| LLM_API_KEY | 空 | 大模型 API 密钥（OpenAI 兼容接口）；留空则解析走规则兜底，功能不受影响 |
 | LLM_BASE_URL | https://api.deepseek.com/v1 | API 地址 |
-| DB_PATH | data/finance.db | SQLite 数据库路径 |
-| API_BASE_URL | http://localhost:8000/api/v1 | 前端请求后端的地址（容器内自动覆盖为 http://backend:8000） |
+| LLM_MODEL | deepseek-chat | 模型名 |
+| LLM_TIMEOUT | 30 | 单次模型调用超时（秒） |
+| OCR_PROVIDER | local | `api` 走视觉模型 / `local` 本地兜底（第二周接入） |
+| DB_PATH | data/finance.db | SQLite 路径；容器内被 compose 覆盖为 `/app/data/finance.db` |
+| DEFAULT_USER_ID | demo_user | 单用户演示版固定用户 ID |
+| API_BASE_URL | http://localhost:8000/api/v1 | 前端请求地址；容器内为 `http://backend:8000/api/v1` |
+| FRONTEND_HOST / FRONTEND_PORT | 0.0.0.0 / 7860 | 前端监听地址与端口 |
+| MOCK_FALLBACK | 0 | `1` 时前端在接口不可用时降级到本地假数据；**默认关闭**，评审须看到数据库真实数据 |
 
 > 真实密钥不得提交到仓库（`.env` 已在 `.gitignore` 中）。
 
@@ -124,13 +133,63 @@ cd frontend && python app.py
 |---|---|---|
 | 健康检查 / 统一响应包装 | 已实现 | `/api/v1/health` 返回标准 `{code, message, data}` |
 | 启动自动建表 | 已实现 | 首次启动自动建 4 张表并初始化分类字典 |
-| AI 核心 Dify 工作流 | 测试中 | 云端已搭建并跑通多模态测试，待封装为 Python 接口 |
-| 自然语言记账 /records/parse | 接口就绪 | 待接入 Dify 解析 |
-| 自然语言查账 /query | 接口就绪 | 槽位与聚合逻辑待联调 |
-| 前端 Gradio 界面 | 已实现 | 基础框架与图表展示已打通 |
-| 小票 OCR 识别 | 开发中 | Dify 多模态测试成功，待接入后端 |
+| 自然语言记账 `/records/parse` | 已实现 | 有 Key 走 LLM，无 Key 走规则兜底；缺金额/时间返回 `clarify_question` |
+| 记账入库 / 明细增删改查 | 已实现 | `/records` 五个接口全部打通，金额按「分」存储、「元」返回 |
+| 消费自动分类与统计 | 已实现 | `/stats/summary`、`/stats/by-category`、`/stats/trend` 全部基于真实入库数据 |
+| 自然语言查账 `/query` | 已实现 | 槽位抽取（时间/类别/聚合）→ 数据库聚合 → 模板生成回答，模型不参与算数 |
+| 预算与超支提醒 | 已实现 | `/budgets` 三个接口，0.8 预警 / 1.0 超支由后端判定 |
+| 演示数据一键灌入 / 清空 | 已实现 | `/demo/load`（幂等）、`/demo/reset` |
+| 前端 Gradio 界面 | 已实现 | 五个 Tab 全部对接真实接口，`MOCK_FALLBACK` 默认关闭 |
+| 小票 / 截图 OCR | 开发中 | Dify 多模态测试成功，`/records/ocr` 第二周接入 |
 
-## 8. 团队分工（Team Division）
+## 8. 功能清单与验证方式（Feature Checklist & Verification）
+
+评审按下面顺序在界面上点一遍，即可覆盖必做清单的全部四项（括号内为对应的接口）。
+
+### 8.1 准备演示数据
+
+进入「演示数据」Tab，点「灌入演示数据」（`POST /demo/load`），预期提示 `15 条流水 / 2 个月份`，并自动布置 4 条当月预算（总额 4000、餐饮 1200、交通 500、娱乐 100）。重复点击不会重复灌入（幂等）。
+
+### 8.2 功能 1：自然语言记账 + 入库
+
+在「记账」Tab 输入 `昨天打车 32 块`（`POST /records/parse`）：
+
+* 预期返回 `fields.amount = 32`、`category = 交通`、`occurred_at` 为昨天、`confidence` 0.62~0.9；
+* 点「确认入库」（`POST /records`），刷新「明细」Tab 能看到这条记录；
+* 若输入 `花了点钱`，不会瞎猜金额，而是返回 `clarify_question = 请输入金额`。
+
+### 8.3 功能 2：自动分类与统计
+
+「明细」Tab 顶部展示当月总额与笔数，「统计」Tab 展示三类视图（`GET /stats/summary`、`/stats/by-category`、`/stats/trend`）。
+以示例账单为准，2026-11 预期为：总额 `¥2410.40`、9 笔、日均 `¥133.91`；分类占比中「居住」`¥2000.00` 占 `83%`。
+
+### 8.4 功能 3：自然语言查账
+
+「记账」Tab 下方问句框（或「统计」Tab 的提问入口，`POST /query`）。示例与预期回答（时间以 2026-11 为「本月」基准）：
+
+| 提问 | 预期 `answer_text` |
+|---|---|
+| 我上个月吃饭花了多少？ | `10 月，「餐饮」共支出 ¥160.50，共 2 笔。` |
+| 这个月哪类花得最多？ | `11 月，花得最多的是「居住」，共 ¥2,000.00（83%），1 笔。` |
+| 最近 7 天一共花了多少钱 | `最近 7 天，共支出 ¥174.00，共 2 笔。` |
+| 最近 30 天支出趋势 | 返回逐日 `table`，最高的一天为 `2026-11-01`（`¥2,000.00`） |
+
+回答中的数字全部由 SQL 聚合得出；`slots` 会回显解析出的时间区间与类别，便于核对「有没有真的解析」。
+
+### 8.5 功能 4：预算与超支提醒
+
+「预算」Tab 设置「娱乐」类 100 元（`POST /budgets`），进度条应立刻变红并显示 `113%`（已用 `¥113.00`、`status = over`）；设总额 4000 元则为 `normal`（`60%`）。预警阈值 80%（`warning`），判断在后端完成。
+
+### 8.6 自动化测试
+
+```bash
+pytest tests -q            # 数据层 / 规则层 / 解析规则 / 查账槽位（50 passed）
+
+python scripts/smoke_api.py   # 需先启动后端：按前端客户端的调用方式跑一遍全部接口，
+                              # 并用前端渲染函数消费返回字段，验证前后端无字段错位
+```
+
+## 9. 团队分工（Team Division）
 
 | 成员 | 负责内容 |
 |---|---|

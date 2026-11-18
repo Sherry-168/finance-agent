@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import API_PREFIX, APP_TITLE
 from app.core.db import init_database
 from app.core.response import ApiError, NOT_FOUND, PARAM_ERROR, fail
-from app.routers import health, query, records
+from app.routers import budgets, demo, health, meta, query, records, stats
 
 
 @asynccontextmanager
@@ -66,6 +66,10 @@ async def handle_http_error(_: Request, exc: StarletteHTTPException):
 app.include_router(health.router, prefix=API_PREFIX)
 app.include_router(records.router, prefix=API_PREFIX)
 app.include_router(query.router, prefix=API_PREFIX)
+app.include_router(stats.router, prefix=API_PREFIX)
+app.include_router(budgets.router, prefix=API_PREFIX)
+app.include_router(meta.router, prefix=API_PREFIX)
+app.include_router(demo.router, prefix=API_PREFIX)
 
 # 根路径健康检查：本地 curl 与容器探活的便捷别名，与 /api/v1/health 等价
 app.include_router(health.router, include_in_schema=False)
