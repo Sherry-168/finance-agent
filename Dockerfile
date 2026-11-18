@@ -21,6 +21,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# pip 源：默认走清华镜像（国内评审环境安装快，避免直连 pypi 卡住）。
+# 需要官方源时：docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 # 依赖单独一层：只改业务代码不会触发重装。
 # 两份 requirements 同名，拷到 /tmp 下改名安装，避免覆盖。
 COPY requirements.txt /tmp/backend-requirements.txt
