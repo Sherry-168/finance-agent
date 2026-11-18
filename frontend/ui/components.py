@@ -73,6 +73,19 @@ def format_ratio(value) -> str:
     return "--%"
 
 
+def query_table_markdown(table: list) -> str:
+    """把后端 /query 的 table 渲染成 Markdown 表格（前端不做任何计算）。"""
+    if not table:
+        return ""
+    lines = ["| 类别 | 金额 | 笔数 |", "|---|---:|---:|"]
+    for item in table:
+        category = str(item.get("category") or "—").replace("|", "\\|")
+        lines.append(
+            f"| {category} | {format_yuan(item.get('total'))} | {item.get('count', 0)} |"
+        )
+    return "\n".join(lines)
+
+
 def draft_summary(draft: dict) -> str:
     """把归一化后的草稿整理成 AI 气泡文案（不参与任何计算）。"""
     fields = draft.get("fields") or {}
@@ -181,6 +194,34 @@ def budget_progress(items: list, notice: str = "") -> str:
     body = "".join(rows) or '<div class="fa-empty" style="padding:24px 0;text-align:center;opacity:.65">本月暂未设定预算</div>'
     notice_html = f"<br><i style='opacity:.7'>{notice}</i>" if notice else ""
     return body + f'<div class="fa-tip" style="margin-top:10px">已用 ≥80% 预警、≥100% 超支；使用率由后端聚合（仅已确认记录）。{notice_html}</div>'
+
+
+def budget_list(items: list, notice: str = "") -> str:
+    """GET /budgets 的已设预算清单（只读展示，不参与计算）。"""
+    if not items:
+        body = '<div class="fa-empty" style="padding:20px 0;text-align:center;opacity:.7">本月暂未设定预算</div>'
+    else:
+        rows = "".join(
+            "<tr>"
+            f"<td>{item.get('category') or '总预算'}</td>"
+            f"<td style='text-align:right'>{format_yuan(item.get('amount'))}</td>"
+            f"<td style='text-align:right;opacity:.65'>#{item.get('id', '—')}</td>"
+            "</tr>"
+            for item in items
+        )
+        body = (
+            '<table class="fa-table" style="width:100%;border-collapse:collapse;font-size:13px">'
+            '<thead><tr><th style="text-align:left">维度</th>'
+            '<th style="text-align:right">预算上限</th><th style="text-align:right">ID</th></tr></thead>'
+            f"<tbody>{rows}</tbody></table>"
+        )
+    extra = f'<div class="fa-tip" style="margin-top:8px"><i>{notice}</i></div>' if notice else ""
+    return (
+        '<div class="fa-section-head"><span class="fa-section-title">已设预算</span>'
+        '<span class="fa-section-desc">GET /budgets</span></div>'
+        + body
+        + extra
+    )
 
 
 def chart_placeholder(chart_id: str, title: str, desc: str) -> str:
@@ -402,10 +443,42 @@ def draft_card(draft: dict) -> str:
 
 def created_card(record_id, notice: str = "") -> str:
     """确认入库成功后的提示卡。"""
-    text = f"已确认入库：记录 id {record_id}（confirmed=1）。明细页稍后可查看（Day 4 接入列表）。"
+    text = f"已确认入库：记录 id {record_id}（confirmed=1），可到「明细管理」查看。"
     if notice:
         text += f"<br><br>{notice}"
     return tip(text, kind="ok")
+
+
+def ocr_drafts_card(drafts: list, engine: str = "") -> str:
+    """小票多草稿卡片：逐条展示，勾选动作由下方 CheckboxGroup 承载。"""
+    if not drafts:
+        return empty_state("未识别到消费条目", "请换一张更清晰的小票，或手动在左侧记一笔。")
+    rows = []
+    for index, draft in enumerate(drafts, start=1):
+        fields = draft.get("fields") or {}
+        missing = draft.get("missing_fields") or []
+        meta = " / ".join(
+            part for part in (
+                fields.get("merchant") or "商户未识别",
+                fields.get("occurred_at") or "时间未识别",
+            ) if part
+        )
+        warn = f' <span class="fa-missing">待补充 {"、".join(missing)}</span>' if missing else ""
+        rows.append(
+            '<div class="fa-field-row">'
+            f'<span class="fa-field-label">{index}. {fields.get("category") or "其他"}</span>'
+            f'<span class="fa-field-value">{format_yuan(fields.get("amount"))} · {meta}{warn}</span>'
+            "</div>"
+        )
+    engine_text = f" · 引擎 {engine}" if engine else ""
+    return (
+        '<div class="fa-draft">'
+        f'<div class="fa-draft-head"><span class="fa-draft-head-title">小票草稿（{len(drafts)} 笔）</span>'
+        '<span class="fa-badge is-ok">待勾选</span></div>'
+        + "".join(rows)
+        + "</div>"
+        + f'<div class="fa-tip" style="margin-top:8px">仅勾选的条目会入库，金额由后端返回，前端不换算。{engine_text}</div>'
+    )
 
 
 # ------------------------------------------------------------------ 预算卡

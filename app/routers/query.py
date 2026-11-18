@@ -1,21 +1,24 @@
-"""自然语言查账。
+"""自然语言查账：LLM/规则只抽槽位，算数一律由 dao + logic.stats 完成。
 
-Day 5 目标：LLM 只抽槽位 → `logic.query_parser` 换算绝对时间区间 →
-`dao` / `logic.stats` 聚合算数 → 后端模板拼 `answer_text`。LLM 全程不参与算数。
-
-Day 2 已修正的阻塞缺陷：入参此前用 `ParseRequest`（必填 `text`），
-按契约传 `{question}` 会直接 422，导致查账链路完全跑不通。
+前端只渲染 answer_text 与 table，因此这里负责把真实统计结果拼成回答文案，
+不返回任何由模型口算出来的金额。
 """
 from __future__ import annotations
 
+import sqlite3
 from datetime import date, timedelta
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from app.core.config import DEFAULT_USER_ID
 from app.core.response import ok
-from logic.query_parser import resolve_time_range
+from app.core.validation import next_day, yuan
+from app.core.db import get_db
+from app.services.nlp import parse_query_slots
+from db import dao
+from logic import stats
 
 router = APIRouter(tags=["query"])
 
@@ -27,24 +30,78 @@ class QuestionRequest(BaseModel):
     session_id: str | None = None
 
 
+def _time_label(start: str, end: str) -> str:
+    """把绝对区间还原成简短中文标签，仅用于回答文案。"""
+    start_date, end_date = date.fromisoformat(start), date.fromisoformat(end)
+    next_month = (
+        date(start_date.year + 1, 1, 1)
+        if start_date.month == 12
+        else date(start_date.year, start_date.month + 1, 1)
+    )
+    if start_date.day == 1 and end_date == next_month - timedelta(days=1):
+        return f"{start_date.year} 年 {start_date.month} 月" if start_date.year != date.today().year else f"{start_date.month} 月"
+    if start_date == end_date:
+        return f"{start_date.month} 月 {start_date.day} 日"
+    return f"{start} 至 {end}"
+
+
+def _category_label(categories: list[str]) -> str:
+    if not categories:
+        return ""
+    return "、".join(categories)
+
+
 @router.post("/query", summary="自然语言查账")
-def query_records(payload: QuestionRequest) -> dict[str, Any]:
-    """返回槽位、回答文案与明细表。"""
-    # TODO(Day 5)：槽位由 LLM 给出（时间表达 / 类别 / 聚合方式），再交给 dao/stats 算数。
-    # 这里先只跑真实的时间换算，证明「自然语言 → 绝对区间」这一环已可用，
-    # 不用编造金额冒充统计结果（评审会核对答案是否来自真实入库数据）。
-    start, end_exclusive = resolve_time_range("本月")
-    # 内部统一左闭右开；对外契约 time_range 为闭区间，故 end 回退一天
-    end_inclusive = (date.fromisoformat(end_exclusive) - timedelta(days=1)).isoformat()
+def query_records(
+    payload: QuestionRequest, conn: sqlite3.Connection = Depends(get_db)
+) -> dict[str, Any]:
+    """返回槽位、回答文案与按类别汇总的表格（仅 confirmed=1）。"""
+    slots = parse_query_slots(payload.question)
+    start, end = slots["start"], slots["end"]
+    filters = {
+        "start": start,
+        "end": next_day(end),
+        "confirmed": 1,
+        "user_id": DEFAULT_USER_ID,
+    }
+
+    rows: list[dict[str, Any]] = []
+    if slots["categories"]:
+        for category in slots["categories"]:
+            rows.extend(dao.query_records(conn, category=category, **filters))
+    else:
+        rows.extend(dao.query_records(conn, **filters))
+
+    groups = stats.by_category(rows)
+    total_cents = stats.total_expense(rows)
+    table = [
+        {"category": item["category"], "total": yuan(item["total_cents"]), "count": item["count"]}
+        for item in groups
+    ]
+
+    label = _time_label(start, end)
+    category_text = _category_label(slots["categories"])
+    subject = f"{label}{category_text}"
+    if slots["agg"] == "top" and groups:
+        top = groups[0]
+        answer = (
+            f"你{subject}支出最多的是「{top['category']}」，"
+            f"共 ¥{yuan(top['total_cents']):,.2f}，{top['count']} 笔。"
+        )
+    elif rows:
+        answer = f"你{subject}共支出 ¥{yuan(total_cents):,.2f}，共 {len(rows)} 笔。"
+    else:
+        answer = f"你{subject}没有找到已确认的支出记录。"
+
     return ok(
         {
             "slots": {
-                "time_range": [start, end_inclusive],
-                "categories": [],
-                "agg": "sum",
-                "group_by": None,
+                "time_range": [start, end],
+                "categories": slots["categories"],
+                "agg": slots["agg"],
+                "group_by": slots["group_by"],
             },
-            "answer_text": "查账接口已连通；槽位解析与聚合统计待接入（Day 5）。",
-            "table": [],
+            "answer_text": answer,
+            "table": table,
         }
     )

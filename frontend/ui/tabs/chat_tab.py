@@ -1,12 +1,14 @@
-"""Tab1 记账对话：聊天流 + 草稿确认卡 + 确认入库闭环。
+"""Tab1 记账对话：记账草稿闭环 + 自然语言查账 + OCR 草稿勾选。
 
-Day 3 核心交互（前端注意事项 4/5 条）：
-- /records/parse 只生成草稿，确认卡上「确认入库」才调 POST /records；
-- clarify_question 非空时只出 AI 反问气泡，不渲染确认卡，多轮用同一 session_id；
-- 确认卡下方表单可直接修改字段后提交（等价于「修改 → 重新提交」）。
-第二周：/records/ocr 多笔草稿勾选。
+交互分流：
+- 记账语句 → POST /records/parse → 草稿确认卡 → POST /records 入库；
+- 查询问句 → POST /query → 只展示后端 answer_text 与 table（前端不算数）；
+- 小票图片 → POST /records/ocr → 多笔 drafts 勾选后逐条入库。
+
+clarify_question 非空时只出 AI 反问气泡，不渲染确认卡，多轮用同一 session_id。
 """
 
+import os
 import re
 import uuid
 
@@ -18,11 +20,18 @@ from config import CATEGORIES, MOCK_FALLBACK
 from ui import components as c
 
 GREETING = (
-    "你好，我是记账助手。直接说一句话就能记账，比如「昨天打车 32 块」。\n\n"
+    "你好，我是记账助手。说一句话就能记账，比如「昨天打车 32 块」；"
+    "也能直接问我「上个月吃饭花了多少」。\n\n"
     "信息不全时我会反问你，补齐后在右侧确认卡核对入库。"
 )
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# 命中这些词视为查账问句，交给后端 /query；其余输入仍走记账解析
+_QUERY_KEYWORDS = (
+    "多少", "几笔", "几元", "占比", "比例", "趋势", "走势", "最多", "排行",
+    "排名", "哪类", "哪一类", "哪个类别", "哪种", "分别", "统计", "查询",
+    "查一下", "查查", "总结一下",
+)
 
 
 def new_session_id() -> str:
@@ -48,6 +57,136 @@ def _parse_draft(text: str, session_id: str) -> tuple[dict | None, str]:
         if api.should_fallback(exc):
             return mock.parse_record(text, session_id), mock.NOTICE
         return None, exc.message
+
+
+def _is_query_intent(text: str) -> bool:
+    """区分查账问句与记账语句，避免把「花了 32 块」误判成提问。"""
+    value = text or ""
+    return any(keyword in value for keyword in _QUERY_KEYWORDS)
+
+
+def _run_query(question: str, session_id: str) -> tuple[dict | None, str]:
+    """调用 /query；后端不可达且允许时降级 Mock，业务错误照实返回。"""
+    try:
+        return api.query(question, session_id), ""
+    except api.ApiError as exc:
+        if api.should_fallback(exc):
+            return mock.query(question, session_id), mock.NOTICE
+        return None, exc.message
+
+
+def _ocr_label(index: int, draft: dict) -> str:
+    fields = draft.get("fields") or {}
+    merchant = fields.get("merchant") or "商户未识别"
+    return f"{index + 1}. {merchant} · {c.format_yuan(fields.get('amount'))}"
+
+
+def recognize_receipt(file_path, history: list):
+    """上传小票 → 识别为多笔草稿（后端 2002 时如实提示，不伪造结果）。"""
+    history = list(history or [])
+    if not file_path:
+        return (
+            history, [], "", c.tip("请先选择一张小票图片。", kind="warn"),
+            gr.update(choices=[], value=[]), gr.update(visible=False),
+        )
+
+    history = _append(history, "user", f"[小票] {os.path.basename(file_path)}")
+    try:
+        result = api.ocr_receipt(file_path)
+        notice = ""
+    except api.ApiError as exc:
+        if api.should_fallback(exc):
+            result = mock.ocr_receipt()
+            notice = mock.NOTICE
+        else:
+            history = _append(history, "assistant", f"小票识别失败：{exc.message}")
+            return (
+                history, [], "", c.tip(f"小票识别失败：{exc.message}", kind="error"),
+                gr.update(choices=[], value=[]), gr.update(visible=False),
+            )
+
+    drafts = result.get("drafts") or []
+    if not drafts:
+        history = _append(history, "assistant", "未识别到消费条目，请换一张更清晰的小票。")
+        return (
+            history, [], "", c.empty_state("未识别到消费条目", "请换一张更清晰的小票。"),
+            gr.update(choices=[], value=[]), gr.update(visible=False),
+        )
+
+    choices = [_ocr_label(index, draft) for index, draft in enumerate(drafts)]
+    card = c.ocr_drafts_card(drafts, result.get("ocr_engine") or "")
+    if notice:
+        card += c.tip(notice, kind="warn")
+    history = _append(history, "assistant", f"识别到 {len(drafts)} 笔草稿，请在右侧勾选后入库。")
+    return (
+        history, drafts, result.get("raw_text") or "", card,
+        gr.update(choices=choices, value=choices), gr.update(visible=True),
+    )
+
+
+def confirm_ocr(selected, drafts: list, raw_text: str, history: list):
+    """仅把勾选的小票草稿逐条入库；前端不修改后端返回的金额。"""
+    history = list(history or [])
+    if not selected or not drafts:
+        history = _append(history, "assistant", "请先勾选至少要入库的小票条目。")
+        return (
+            history, [], "", gr.update(choices=[], value=[]), gr.update(visible=False),
+        )
+
+    saved: list[str] = []
+    failed: list[str] = []
+    notices: list[str] = []
+    for label in selected:
+        try:
+            index = int(str(label).split(".", 1)[0]) - 1
+        except (TypeError, ValueError):
+            continue
+        if not (0 <= index < len(drafts)):
+            continue
+        draft = drafts[index]
+        fields = draft.get("fields") or {}
+        amount = fields.get("amount")
+        if not isinstance(amount, (int, float)) or amount <= 0:
+            failed.append(f"{label}（金额缺失）")
+            continue
+        payload = {
+            "draft_id": draft.get("draft_id"),
+            "amount": amount,
+            "category": fields.get("category") or "其他",
+            "merchant": fields.get("merchant") or None,
+            "occurred_at": fields.get("occurred_at") or "",
+            "note": fields.get("note") or None,
+            "raw_text": raw_text or f"小票：{fields.get('merchant') or fields.get('category') or ''}",
+            "source": "ocr",
+        }
+        try:
+            result = api.create_record(payload)
+        except api.ApiError as exc:
+            if api.should_fallback(exc):
+                result = mock.create_record(payload)
+                notices.append(mock.NOTICE)
+            else:
+                failed.append(f"{label}（{exc.message}）")
+                continue
+        saved.append(str(result.get("id") or "?"))
+
+    if saved:
+        history = _append(history, "assistant", f"小票已入库 {len(saved)} 笔（记录 id：{'、'.join(saved)}）。")
+    if failed:
+        history = _append(history, "assistant", "以下条目未入库：" + "；".join(failed))
+    if notices:
+        history = _append(history, "assistant", f"_{notices[0]}_")
+    return (
+        history, [], "", gr.update(choices=[], value=[]), gr.update(visible=False),
+    )
+
+
+def discard_ocr():
+    """放弃整张小票草稿。"""
+    return (
+        [], "", c.tip("已放弃小票草稿。"),
+        gr.update(choices=[], value=[]), gr.update(visible=False),
+    )
 
 
 def _empty_form():
@@ -77,6 +216,22 @@ def respond(message: str, history: list, session_id: str, draft: dict | None):
 
     session_id = session_id or new_session_id()
     history = _append(history, "user", text)
+
+    # 查账问句：只渲染后端算好的 answer_text / table，不在前端计算
+    if _is_query_intent(text):
+        result, notice = _run_query(text, session_id)
+        if result is None:
+            history = _append(history, "assistant", f"查账失败：{notice}")
+        else:
+            content = result.get("answer_text") or "（后端未返回回答文案）"
+            table_md = c.query_table_markdown(result.get("table") or [])
+            if table_md:
+                content = f"{content}\n\n{table_md}"
+            if notice:
+                content = f"{content}\n\n_{notice}_"
+            history = _append(history, "assistant", content)
+        form_values = _form_values(draft) if draft else _empty_form()
+        return (history, "", session_id, draft, card, form_visible, *form_values)
 
     # 多轮澄清：把补充语句拼进原始输入，便于后端 / Mock 合并槽位
     prev_text = (draft or {}).get("raw_text") or ""
@@ -167,9 +322,40 @@ def reset():
     )
 
 
+def reset_all():
+    """清空对话、记账草稿与 OCR 草稿。"""
+    return (
+        *reset(),
+        [],
+        "",
+        c.tip("已放弃小票草稿。"),
+        gr.update(choices=[], value=[]),
+        gr.update(visible=False),
+    )
+
+
+def scan_receipt(photo_file, album_file, history: list):
+    """扫描图标：对最近一次选择的小票图片重新识别。"""
+    return recognize_receipt(album_file or photo_file, history)
+
+
+def toggle_ocr_menu(visible: bool):
+    """加号按钮展开 / 收起上传入口菜单。"""
+    next_visible = not bool(visible)
+    return gr.update(visible=next_visible), next_visible
+
+
+def reset_full():
+    """清空对话与草稿，同时收起加号菜单。"""
+    return (*reset_all(), gr.update(visible=False), False)
+
+
 def build_chat_tab() -> dict:
     session_state = gr.State(new_session_id())
     draft_state = gr.State(None)
+    ocr_drafts_state = gr.State([])
+    ocr_raw_state = gr.State("")
+    ocr_menu_state = gr.State(False)
 
     with gr.Row(equal_height=False):
         with gr.Column(scale=3, elem_classes=["fa-panel"]):
@@ -180,26 +366,62 @@ def build_chat_tab() -> dict:
                 height=380,
                 elem_classes=["fa-chat"],
             )
-            with gr.Row(elem_classes=["fa-toolbar"]):
-                text_input = gr.Textbox(
-                    show_label=False,
-                    placeholder="例如：昨天打车 32 块",
-                    lines=1,
-                    max_lines=4,
-                    scale=4,
-                    container=False,
-                )
-                send_btn = gr.Button("发送", variant="primary", scale=1)
-            with gr.Row(elem_classes=["fa-toolbar"]):
-                ocr_file = gr.File(
-                    label="小票 / 截图（OCR 第二周接入，暂不可用）",
-                    file_types=["image"],
-                    interactive=False,
-                    height=110,
-                    scale=3,
-                )
-                ocr_btn = gr.Button("识别小票", scale=1)
-                clear_btn = gr.Button("清空对话", variant="secondary", scale=1)
+
+            # 类似聊天 App 的底部输入栏：加号 / 语音 / 文本 / 扫描 / 头像
+            with gr.Group(elem_classes=["fa-composer-wrap"]):
+                with gr.Row(elem_classes=["fa-composer"]):
+                    plus_btn = gr.Button(
+                        "＋", elem_classes=["fa-plus-btn"], min_width=46, scale=0
+                    )
+                    gr.HTML(
+                        '<span class="fa-voice" title="语音占位">'
+                        '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">'
+                        '<path d="M4 9v6M8 6v12M12 3v18M16 7v10M20 10v4" '
+                        'fill="none" stroke="currentColor" stroke-width="2.2" '
+                        'stroke-linecap="round"/></svg></span>'
+                    )
+                    text_input = gr.Textbox(
+                        show_label=False,
+                        placeholder="文字记录或按住语音记录",
+                        lines=1,
+                        max_lines=3,
+                        scale=1,
+                        container=False,
+                        elem_classes=["fa-composer-input"],
+                    )
+                    send_btn = gr.Button(
+                        "➤", elem_classes=["fa-send-btn"], min_width=38, scale=0
+                    )
+                    ocr_btn = gr.Button(
+                        "▣", elem_classes=["fa-scan-btn"], min_width=38, scale=0
+                    )
+                    clear_btn = gr.Button(
+                        "⌫", elem_classes=["fa-clear-btn"], min_width=30, scale=0
+                    )
+
+                with gr.Group(visible=False, elem_classes=["fa-plus-menu"]) as ocr_menu:
+                    gr.HTML('<div class="fa-menu-hint">选择导入方式</div>')
+                    with gr.Row(elem_classes=["fa-plus-menu-row"]):
+                        photo_file = gr.File(
+                            label="拍照识别",
+                            file_types=["image"],
+                            interactive=True,
+                            elem_classes=["fa-menu-tile"],
+                            scale=1,
+                        )
+                        album_file = gr.File(
+                            label="相册识别",
+                            file_types=["image"],
+                            interactive=True,
+                            elem_classes=["fa-menu-tile"],
+                            scale=1,
+                        )
+                        gr.Button(
+                            "Excel 导入",
+                            interactive=False,
+                            elem_classes=["fa-menu-tile is-disabled"],
+                            scale=1,
+                        )
 
         with gr.Column(scale=2):
             gr.HTML(c.section_head("草稿确认卡", "确认后才会入库"))
@@ -214,10 +436,20 @@ def build_chat_tab() -> dict:
                     confirm_btn = gr.Button("确认入库", variant="primary", scale=2)
                     discard_btn = gr.Button("放弃草稿", variant="stop", scale=1)
 
+            with gr.Group(visible=False) as ocr_panel:
+                gr.HTML(c.section_head("小票草稿", "勾选需要的条目后入库"))
+                ocr_info = gr.HTML(c.empty_state("尚未识别小票", "上传图片后将自动识别。"))
+                ocr_choices = gr.CheckboxGroup(
+                    label="选择要入库的条目", choices=[], value=[]
+                )
+                with gr.Row(elem_classes=["fa-toolbar"]):
+                    ocr_confirm_btn = gr.Button("入库所选", variant="primary", scale=2)
+                    ocr_discard_btn = gr.Button("放弃小票草稿", variant="stop", scale=1)
+
     gr.HTML(
         c.tip(
-            "交互约定：clarify_question 非空时以 AI 气泡继续反问，不渲染确认卡；"
-            "多商品小票返回 drafts 数组，支持勾选部分入库（第二周）。"
+            "交互约定：问句（含「多少 / 占比 / 趋势」等）走查账接口，只展示后端算好的回答与表格；"
+            "记账语句生成草稿，确认后才入库；加号里可选择拍照 / 相册小票识别。"
         )
     )
 
@@ -245,18 +477,45 @@ def build_chat_tab() -> dict:
         outputs=[chatbot, draft_state, draft_area, draft_form],
     )
     discard_btn.click(discard_draft, inputs=[draft_state], outputs=[draft_state, draft_area, draft_form])
-    clear_btn.click(reset, outputs=respond_outputs)
+
+    ocr_outputs = [ocr_drafts_state, ocr_raw_state, ocr_info, ocr_choices, ocr_panel]
+    ocr_event_outputs = [chatbot, *ocr_outputs]
+    photo_file.change(recognize_receipt, inputs=[photo_file, chatbot], outputs=ocr_event_outputs)
+    album_file.change(recognize_receipt, inputs=[album_file, chatbot], outputs=ocr_event_outputs)
     ocr_btn.click(
-        lambda: c.todo_notice("小票识别 POST /records/ocr", "第二周"),
-        outputs=draft_area,
+        scan_receipt,
+        inputs=[photo_file, album_file, chatbot],
+        outputs=ocr_event_outputs,
+    )
+    ocr_confirm_btn.click(
+        confirm_ocr,
+        inputs=[ocr_choices, ocr_drafts_state, ocr_raw_state, chatbot],
+        outputs=ocr_event_outputs,
+    )
+    ocr_discard_btn.click(discard_ocr, outputs=ocr_outputs)
+
+    plus_btn.click(
+        toggle_ocr_menu,
+        inputs=[ocr_menu_state],
+        outputs=[ocr_menu, ocr_menu_state],
+    )
+    clear_btn.click(
+        reset_full,
+        outputs=[*respond_outputs, *ocr_outputs, ocr_menu, ocr_menu_state],
     )
 
     return {
         "chatbot": chatbot,
         "text_input": text_input,
         "send_btn": send_btn,
-        "ocr_file": ocr_file,
+        "ocr_file": album_file,
+        "photo_file": photo_file,
+        "album_file": album_file,
+        "ocr_menu": ocr_menu,
         "ocr_btn": ocr_btn,
+        "ocr_choices": ocr_choices,
+        "ocr_confirm_btn": ocr_confirm_btn,
+        "ocr_discard_btn": ocr_discard_btn,
         "clear_btn": clear_btn,
         "draft_area": draft_area,
         "draft_form": draft_form,
@@ -264,4 +523,6 @@ def build_chat_tab() -> dict:
         "discard_btn": discard_btn,
         "session_state": session_state,
         "draft_state": draft_state,
+        "ocr_drafts_state": ocr_drafts_state,
+        "ocr_raw_state": ocr_raw_state,
     }

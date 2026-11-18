@@ -213,6 +213,33 @@ def health() -> str:
     return "Mock 模式（未连接后端）"
 
 
+def ocr_receipt() -> dict:
+    """模拟 POST /records/ocr：多笔小票草稿，供勾选入库 UI 自测。"""
+    today = dt.date.today().isoformat()
+    return {
+        "drafts": [
+            {
+                "draft_id": "mock_ocr_1",
+                "fields": {
+                    "amount": 45.5, "category": "餐饮", "merchant": "瑞幸咖啡",
+                    "occurred_at": today, "note": None,
+                },
+                "confidence": 0.88, "missing_fields": [], "clarify_question": None,
+            },
+            {
+                "draft_id": "mock_ocr_2",
+                "fields": {
+                    "amount": 12.0, "category": "交通", "merchant": "地铁",
+                    "occurred_at": today, "note": None,
+                },
+                "confidence": 0.86, "missing_fields": [], "clarify_question": None,
+            },
+        ],
+        "ocr_engine": "mock",
+        "raw_text": "瑞幸咖啡 45.50\n地铁 12.00",
+    }
+
+
 def create_record(payload: dict) -> dict:
     """模拟 POST /records：写入内存明细表并返回成功结构。"""
     global _MOCK_NEXT_ID

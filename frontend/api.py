@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
@@ -174,6 +175,22 @@ def parse_record(text: str, session_id: str) -> dict:
         json_body={"text": text, "session_id": session_id},
     )
     return normalize_draft(data)
+
+
+def ocr_receipt(file_path: str) -> dict:
+    """POST /records/ocr —— 上传小票，返回可勾选的多笔草稿。"""
+    with open(file_path, "rb") as stream:
+        data = request(
+            "POST",
+            "/records/ocr",
+            files={"file": (os.path.basename(file_path), stream, "image/*")},
+        ) or {}
+    drafts = data.get("drafts") or []
+    return {
+        "drafts": [normalize_draft(draft) for draft in drafts],
+        "ocr_engine": data.get("ocr_engine"),
+        "raw_text": data.get("raw_text") or "",
+    }
 
 
 def create_record(payload: dict) -> dict:

@@ -115,6 +115,44 @@ def add_records(
     return sum(1 for _ in (add_record(conn, r, user_id, confirmed) for r in records))
 
 
+def get_record(conn: sqlite3.Connection, record_id: int, user_id: str = DEFAULT_USER) -> dict[str, Any] | None:
+    """按 id 取单条记录（带 user_id 隔离），不存在返回 None。"""
+    row = conn.execute(
+        "SELECT * FROM records WHERE id = ? AND user_id = ?", (record_id, user_id)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def count_records(
+    conn: sqlite3.Connection,
+    start: str | None = None,
+    end: str | None = None,
+    category: str | None = None,
+    confirmed: int | None = None,
+    source: str | None = None,
+    user_id: str = DEFAULT_USER,
+) -> int:
+    """与 query_records 同口径的计数（供分页 total 与演示数据幂等判断）。"""
+    sql = "SELECT COUNT(*) AS n FROM records WHERE user_id = ?"
+    args: list[Any] = [user_id]
+    if start:
+        sql += " AND occurred_at >= ?"
+        args.append(start)
+    if end:
+        sql += " AND occurred_at < ?"
+        args.append(end)
+    if category:
+        sql += " AND category = ?"
+        args.append(category)
+    if confirmed is not None:
+        sql += " AND confirmed = ?"
+        args.append(int(confirmed))
+    if source:
+        sql += " AND source = ?"
+        args.append(source)
+    return int(conn.execute(sql, args).fetchone()["n"])
+
+
 def update_record(conn: sqlite3.Connection, record_id: int, fields: dict[str, Any]) -> None:
     """按 id 更新指定字段（确认草稿、修正金额/类别等）。"""
     allowed = {"amount_cents", "category", "merchant", "occurred_at", "note", "confirmed"}
@@ -217,6 +255,47 @@ def get_budget(
     return row["amount_cents"] if row else None
 
 
+def get_budget_row(
+    conn: sqlite3.Connection,
+    month: str,
+    category: str | None = None,
+    user_id: str = DEFAULT_USER,
+) -> dict[str, Any] | None:
+    """返回完整预算行（含 id），供 POST /budgets 回显。"""
+    row = conn.execute(
+        "SELECT id, month, category, amount_cents FROM budgets "
+        "WHERE user_id = ? AND month = ? AND category = ?",
+        (user_id, month, category or ""),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "month": row["month"],
+        "category": row["category"] or None,
+        "amount_cents": row["amount_cents"],
+    }
+
+
+def list_budgets(conn: sqlite3.Connection, month: str, user_id: str = DEFAULT_USER) -> list[dict[str, Any]]:
+    """查询某月全部预算；总预算（category=''）排在最前。"""
+    rows = conn.execute(
+        "SELECT id, month, category, amount_cents FROM budgets "
+        "WHERE user_id = ? AND month = ? "
+        "ORDER BY CASE WHEN category = '' THEN 0 ELSE 1 END, category",
+        (user_id, month),
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "month": row["month"],
+            "category": row["category"] or None,
+            "amount_cents": row["amount_cents"],
+        }
+        for row in rows
+    ]
+
+
 def budget_alerts(
     conn: sqlite3.Connection,
     month: str,
@@ -253,3 +332,49 @@ def _month_range(month: str) -> tuple[str, str]:
     else:
         end = f"{y}-{m + 1:02d}-01"
     return f"{month}-01", end
+
+
+# ---------------------------------------------------------------- 解析会话（澄清反问多轮上下文）
+
+
+def load_session(conn: sqlite3.Connection, session_id: str) -> dict[str, Any] | None:
+    """读取会话中暂存的草稿槽位；无记录返回 None。"""
+    row = conn.execute(
+        "SELECT context FROM sessions WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    if not row or not row["context"]:
+        return None
+    try:
+        context = json.loads(row["context"])
+    except (TypeError, ValueError):
+        return None
+    return context if isinstance(context, dict) else None
+
+
+def save_session(conn: sqlite3.Connection, session_id: str, context: dict[str, Any]) -> None:
+    """写入 / 覆盖会话上下文。"""
+    conn.execute(
+        """INSERT INTO sessions (session_id, context, updated_at)
+           VALUES (?, ?, datetime('now', 'localtime'))
+           ON CONFLICT(session_id) DO UPDATE SET
+             context = excluded.context, updated_at = excluded.updated_at""",
+        (session_id, json.dumps(context, ensure_ascii=False)),
+    )
+    conn.commit()
+
+
+def delete_session(conn: sqlite3.Connection, session_id: str) -> None:
+    """槽位齐全后清理会话，避免下一笔账被旧上下文污染。"""
+    conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+    conn.commit()
+
+
+# ---------------------------------------------------------------- 演示数据
+
+
+def clear_user_data(conn: sqlite3.Connection, user_id: str = DEFAULT_USER) -> dict[str, int]:
+    """清空单用户流水与预算（演示重置），返回删除条数。"""
+    records = conn.execute("DELETE FROM records WHERE user_id = ?", (user_id,)).rowcount
+    budgets = conn.execute("DELETE FROM budgets WHERE user_id = ?", (user_id,)).rowcount
+    conn.commit()
+    return {"deleted_records": records, "deleted_budgets": budgets}
