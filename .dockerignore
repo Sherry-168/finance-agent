@@ -22,9 +22,8 @@ env/
 *.db
 data/*.db
 
-# 文档与测试不参与运行
+# 文档不参与运行；tests 保留进镜像，评审可在容器内直接跑 pytest 自检
 docs/
-tests/
 *.md
 
 # 编辑器 / 系统文件

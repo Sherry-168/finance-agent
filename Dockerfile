@@ -21,6 +21,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# pip 源：默认走清华镜像（国内评审环境安装快，避免直连 pypi 卡住）。
+# 需要官方源时：docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 # 依赖单独一层：只改业务代码不会触发重装。
 # 两份 requirements 同名，拷到 /tmp 下改名安装，避免覆盖。
 COPY requirements.txt /tmp/backend-requirements.txt
@@ -40,7 +46,8 @@ RUN mkdir -p /app/data
 
 EXPOSE 8000 7860
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"
+# 健康检查不写在镜像里：本镜像被两个服务复用，探针端口各不相同
+# （backend 探 8000，frontend 跑 7860）。写死在此会让前端容器永远显示 unhealthy，
+# 因此统一在 docker-compose.yml 的 backend 服务内声明。
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

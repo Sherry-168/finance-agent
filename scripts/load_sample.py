@@ -24,7 +24,8 @@ def main() -> None:
     conn = dao.connect()
     dao.init_db(conn)
 
-    with path.open(encoding="utf-8", newline="") as f:
+    # Excel 另存的 CSV 常带 UTF-8 BOM，用 utf-8-sig 读取，否则首列会变成 "\ufeffdate"
+    with path.open(encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
 
     n = 0

@@ -52,7 +52,7 @@ services:
       API_BASE_URL: http://backend:8000/api/v1
       FRONTEND_HOST: 0.0.0.0
       FRONTEND_PORT: "7860"
-      MOCK_FALLBACK: ${MOCK_FALLBACK:-1}
+      MOCK_FALLBACK: ${MOCK_FALLBACK:-0}
       TZ: Asia/Shanghai
     depends_on:
       backend:

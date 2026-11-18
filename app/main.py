@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import API_PREFIX, APP_TITLE
 from app.core.db import init_database
 from app.core.response import ApiError, NOT_FOUND, PARAM_ERROR, fail
-from app.routers import budgets, categories, demo, health, ocr, query, records, stats
+from app.routers import budgets, demo, health, meta, ocr, query, records, stats
 
 
 @asynccontextmanager
@@ -68,7 +68,7 @@ app.include_router(records.router, prefix=API_PREFIX)
 app.include_router(query.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)
 app.include_router(budgets.router, prefix=API_PREFIX)
-app.include_router(categories.router, prefix=API_PREFIX)
+app.include_router(meta.router, prefix=API_PREFIX)
 app.include_router(demo.router, prefix=API_PREFIX)
 app.include_router(ocr.router, prefix=API_PREFIX)
 

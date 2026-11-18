@@ -1,70 +1,112 @@
-"""统计接口：月度概览 / 类别占比 / 每日趋势。
+"""统计路由：月度概览、类别占比、每日趋势。
 
-统计口径统一为 confirmed=1，草稿不参与；聚合由 DAO + logic.stats 完成，
-接口层只做「分 → 元」和 0~1 占比换算。
+口径（docs/api.md §4）：只统计 `confirmed=1` 的记录，草稿不计入。
+金额统一以「元」返回；占比统一为 0~1 小数（前端 format_ratio 直接乘 100 展示）。
 """
 from __future__ import annotations
 
-import sqlite3
-from datetime import date, timedelta
+import calendar
+import datetime as dt
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
 from app.core.config import DEFAULT_USER_ID
 from app.core.db import get_db
-from app.core.response import ApiError, ok
-from app.core.validation import elapsed_days, month_bounds, next_day, ratio, valid_date, valid_month, yuan
+from app.core.response import ApiError, PARAM_ERROR, ok
 from db import dao
-from logic import stats
+from logic.money import cents_to_yuan
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
+_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def _check_month(month: str | None) -> str:
+    """校验并补全省略的月份（默认当前月）。"""
+    month = month or dt.date.today().strftime("%Y-%m")
+    if not _MONTH_RE.match(month):
+        raise ApiError(PARAM_ERROR, "月份格式应为 YYYY-MM，例如 2026-11")
+    return month
+
+
+def _month_bounds(month: str) -> tuple[str, str]:
+    """'YYYY-MM' → (当月 1 日, 下月 1 日)，左闭右开。"""
+    year, mon = (int(part) for part in month.split("-"))
+    start = dt.date(year, mon, 1)
+    end = dt.date(year + 1, 1, 1) if mon == 12 else dt.date(year, mon + 1, 1)
+    return start.isoformat(), end.isoformat()
+
+
+def _days_elapsed(month: str) -> int:
+    """日均分母：当月已过天数（历史月份取整月天数，未来月份取 1 避免除零）。"""
+    year, mon = (int(part) for part in month.split("-"))
+    today = dt.date.today()
+    days_in_month = calendar.monthrange(year, mon)[1]
+    if (year, mon) == (today.year, today.month):
+        return max(today.day, 1)
+    if (year, mon) > (today.year, today.month):
+        return 1
+    return days_in_month
+
+
+def _yuan(cents: int) -> float:
+    return float(cents_to_yuan(cents))
+
 
 @router.get("/summary", summary="月度概览")
-def stats_summary(
-    month: str | None = Query(None, description="YYYY-MM，缺省为当前月"),
-    conn: sqlite3.Connection = Depends(get_db),
+def summary(
+    month: str | None = Query(None, description="YYYY-MM，默认当前月"),
+    conn: Any = Depends(get_db),
 ) -> dict[str, Any]:
-    month = valid_month(month)
-    start, end = month_bounds(month)
-    rows = dao.query_records(conn, start, end, confirmed=1, user_id=DEFAULT_USER_ID)
-    total_cents = stats.total_expense(rows)
+    """月度支出总额 / 笔数 / 日均（日均 = 总额 ÷ 当月已过天数）。"""
+    month = _check_month(month)
+    start, end = _month_bounds(month)
+
+    records = dao.query_records(
+        conn, start=start, end=end, confirmed=1, user_id=DEFAULT_USER_ID
+    )
+    total_cents = sum(int(r["amount_cents"]) for r in records)
+    total = _yuan(total_cents)
+    days = _days_elapsed(month)
+
     return ok(
         {
             "month": month,
-            "total": yuan(total_cents),
-            "count": len(rows),
-            "daily_avg": round(total_cents / 100 / elapsed_days(month), 2),
+            "total": total,
+            "count": len(records),
+            "daily_avg": round(total / days, 2),
         }
     )
 
 
 @router.get("/by-category", summary="类别占比")
-def stats_by_category(
-    month: str | None = Query(None, description="YYYY-MM，与 start/end 二选一"),
-    start: str | None = Query(None, description="开始日期 YYYY-MM-DD（含）"),
-    end: str | None = Query(None, description="结束日期 YYYY-MM-DD（含）"),
-    conn: sqlite3.Connection = Depends(get_db),
+def by_category(
+    month: str | None = Query(None, description="YYYY-MM，默认当前月"),
+    start: str | None = Query(None, description="开始日期 YYYY-MM-DD，与 end 搭配使用"),
+    end: str | None = Query(None, description="结束日期 YYYY-MM-DD（含当天）"),
+    conn: Any = Depends(get_db),
 ) -> dict[str, Any]:
-    start_date = valid_date(start, field="开始日期")
-    end_date = valid_date(end, field="结束日期")
-    if not (start_date or end_date):
-        month = valid_month(month)
-        start_date, end_exclusive = month_bounds(month)
+    """按类别汇总金额与笔数，ratio 为 0~1 小数，按金额降序。"""
+    if start and end:
+        start_day, end_day = start, end
+        try:
+            end_exclusive = (dt.date.fromisoformat(end_day) + dt.timedelta(days=1)).isoformat()
+        except ValueError:
+            raise ApiError(PARAM_ERROR, "日期格式应为 YYYY-MM-DD")
     else:
-        end_exclusive = next_day(end_date)
-        if start_date and end_date and start_date > end_date:
-            raise ApiError(1001, "开始日期不能晚于结束日期")
+        month = _check_month(month)
+        start_day, end_exclusive = _month_bounds(month)
 
-    rows = dao.sum_by_category(conn, start_date, end_exclusive, user_id=DEFAULT_USER_ID)
-    grand_total = sum(int(row["total_cents"]) for row in rows)
+    rows = dao.sum_by_category(conn, start=start_day, end=end_exclusive, user_id=DEFAULT_USER_ID)
+    grand = sum(int(row["total_cents"]) for row in rows)
     items = [
         {
             "category": row["category"],
-            "total": yuan(row["total_cents"]),
-            "count": row["count"],
-            "ratio": ratio(row["total_cents"], grand_total),
+            "total": _yuan(row["total_cents"]),
+            "count": int(row["count"]),
+            "ratio": round(int(row["total_cents"]) / grand, 2) if grand else 0.0,
         }
         for row in rows
     ]
@@ -72,29 +114,34 @@ def stats_by_category(
 
 
 @router.get("/trend", summary="每日趋势")
-def stats_trend(
-    days: int = Query(30, ge=1, le=90),
-    conn: sqlite3.Connection = Depends(get_db),
+def trend(
+    days: int = Query(30, ge=1, le=90, description="回溯天数，默认 30"),
+    conn: Any = Depends(get_db),
 ) -> dict[str, Any]:
-    today = date.today()
-    start = (today - timedelta(days=days - 1)).isoformat()
-    end_exclusive = (today + timedelta(days=1)).isoformat()
-    rows = dao.query_records(
-        conn, start, end_exclusive, confirmed=1, user_id=DEFAULT_USER_ID
-    )
+    """近 N 天每日支出与笔数，无消费的日期补 0，便于折线连续。"""
+    today = dt.date.today()
+    start = (today - dt.timedelta(days=days - 1)).isoformat()
+    end_exclusive = (today + dt.timedelta(days=1)).isoformat()
 
-    by_day: dict[str, dict[str, int]] = {}
-    for row in rows:
-        day = row["occurred_at"][:10]
-        bucket = by_day.setdefault(day, {"total_cents": 0, "count": 0})
-        bucket["total_cents"] += int(row["amount_cents"])
+    records = dao.query_records(
+        conn, start=start, end=end_exclusive, confirmed=1, user_id=DEFAULT_USER_ID
+    )
+    buckets: dict[str, dict[str, int]] = {}
+    for record in records:
+        day = record["occurred_at"][:10]
+        bucket = buckets.setdefault(day, {"total_cents": 0, "count": 0})
+        bucket["total_cents"] += int(record["amount_cents"])
         bucket["count"] += 1
 
     items = []
     for offset in range(days - 1, -1, -1):
-        day = (today - timedelta(days=offset)).isoformat()
-        bucket = by_day.get(day, {"total_cents": 0, "count": 0})
+        day = (today - dt.timedelta(days=offset)).isoformat()
+        bucket = buckets.get(day, {"total_cents": 0, "count": 0})
         items.append(
-            {"date": day, "total": yuan(bucket["total_cents"]), "count": bucket["count"]}
+            {
+                "date": day,
+                "total": _yuan(bucket["total_cents"]),
+                "count": bucket["count"],
+            }
         )
     return ok({"items": items})

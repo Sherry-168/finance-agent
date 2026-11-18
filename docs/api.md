@@ -41,7 +41,7 @@
 
 ## 2. 记账相关
 
-### 2.1 自然语言解析为草稿 `【已实现·真实解析】`
+### 2.1 自然语言解析为草稿 `【已实现】`
 
 **POST** `/records/parse`（**不入库**，只返回草稿）
 
@@ -72,7 +72,7 @@
 - `confidence` 为 0~1 浮点数，前端展示为百分比。
 - `draft_id` 用于确认入库时回溯草稿。
 
-### 2.2 确认入库 `【已实现·真实落库】`
+### 2.2 确认入库 `【已实现】`
 
 **POST** `/records`
 
@@ -94,7 +94,7 @@
 - `amount` / `category` / `occurred_at` / `raw_text` **必填**；`merchant` / `note` 可空。
 - 可选透传 `draft_id`、`source`（`text`/`ocr`/`manual`/`demo`），后端当前忽略，前端允许发送。
 
-### 2.3 小票 OCR（第二周接入）`【接口就绪·识别待接入】`
+### 2.3 小票 OCR（第二周接入）`【待实现】`
 
 **POST** `/records/ocr`，`multipart/form-data`，字段名 `file`。
 
@@ -151,7 +151,7 @@
 
 id 不存在返回 `1002`；前端删除前需二次确认。
 
-## 3. 自然语言查账 `【已实现·真实聚合】`
+## 3. 自然语言查账 `【已实现】`
 
 **POST** `/query`
 
@@ -170,7 +170,7 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 
 - `slots` 由 LLM 解析，`answer_text` 由后端模板拼数字生成，**LLM 不参与算数**。
 - 前端只渲染 `answer_text` 与 `table`，`table` 为空时隐藏表格。
-- 实现进度（2026-11-18）：槽位解析支持 LLM + 规则兜底，金额 / 笔数均由 DAO + `logic.stats` 真实聚合，`answer_text` 为后端模板拼真实数字；前端展示无需改动。
+- 实现进度（2026-11-18）：槽位抽取（`logic/query_parser.extract_slots`）+ 真实聚合已接入，`answer_text` 与 `table` 均由数据库计算得出；LLM 不参与算数，仅在有 Key 时辅助解析。
 
 ## 4. 统计 `【已实现】`
 
@@ -275,25 +275,23 @@ id 不存在返回 `1002`；前端删除前需二次确认。
 
 | 接口 | 状态 | 备注 |
 |---|---|---|
-| `POST /records/parse` | 已实现 | 规则 + 可选 LLM 解析；缺槽位返回 `clarify_question` 并暂存会话 |
-| `POST /records` | 已实现 | `raw_text` 必填；真实写入 records 表并返回自增 id |
-| `POST /query` | 已实现 | 槽位解析 + DAO/stats 真实聚合；`answer_text` / `table` 均由后端生成 |
-| `GET /records` | 已实现 | 时间 / 类别筛选 + 分页（金额单位为元） |
-| `PUT /records/{id}` | 已实现 | 部分字段更新；不存在返回 1002 |
-| `DELETE /records/{id}` | 已实现 | 不存在返回 1002 |
-| `GET /stats/summary` | 已实现 | 仅 confirmed=1，日均按当月已过天数 |
-| `GET /stats/by-category` | 已实现 | 支持 `month` 或 `start/end`，`ratio` 为 0~1 |
-| `GET /stats/trend` | 已实现 | 近 N 天每日汇总，含 0 消费日 |
-| `POST /budgets` | 已实现 | 同月同维度覆盖；`category=null` 表示总预算 |
-| `GET /budgets` | 已实现 | 当月预算列表 |
-| `GET /budgets/alerts` | 已实现 | 80% warning / 100% over 由后端判断 |
-| `GET /categories` | 已实现 | 固定 8 类 |
-| `POST /demo/load` | 已实现 | 两月共 60 条真实落库流水 + 三档预算，重复调用幂等 |
-| `POST /demo/reset` | 已实现 | 清空当前用户的流水与预算 |
-| `POST /records/ocr` | 接口就绪 | 当前返回 2002；第二周替换识别实现即可 |
+| `POST /records/parse` | 已实现 | 解析接缝：有 Key 走 LLM，无 Key 走规则兜底；缺金额/时间返回 `clarify_question` |
+| `POST /records` | 已实现 | 真正落库，返回自增 id（`raw_text` 必填） |
+| `POST /query` | 已实现 | 槽位抽取 + 真实聚合；时间/类别解析不到时兜底「本月」并回显 `slots` |
+| `GET /records` | 已实现 | 分页 + 时间/类别筛选，金额按「元」返回 |
+| `PUT /records/{id}` | 已实现 | 只更新传入字段；不存在返回 1002 |
+| `DELETE /records/{id}` | 已实现 | 物理删除；不存在返回 1002 |
+| `GET /stats/summary` | 已实现 | 日均分母按当月已过天数计算（历史月取整月） |
+| `GET /stats/by-category` | 已实现 | ratio 0~1 两位小数，按金额降序 |
+| `GET /stats/trend` | 已实现 | days 1~90，无消费日期补 0 |
+| `POST /budgets` | 已实现 | 同月同维度覆盖；非法月份/类别返回 1001 |
+| `GET /budgets` | 已实现 | `category=null` 为总额预算 |
+| `GET /budgets/alerts` | 已实现 | 状态由后端判定（0.8 预警 / 1.0 超支） |
+| `GET /categories` | 已实现 | 直接读词典文件，不受库状态影响 |
+| `POST /demo/load` | 已实现 | 幂等：已有演示数据不重复导入；同时布置 4 条演示预算 |
+| `POST /demo/reset` | 已实现 | 清空该用户流水与预算，返回删除条数 |
+| `POST /records/ocr` | 待实现 | 第二周接入 |
 | `GET /health` | 已实现 | 前后端连通性检查 |
-
-> 2026-11-18 联调状态：上表除 OCR 识别算法（第二周范围）外全部接通，详见 `tests/test_api.py`。
 
 ## 10. 固定分类字典（严禁修改）
 
