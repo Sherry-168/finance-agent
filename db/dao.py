@@ -268,6 +268,54 @@ def get_record(
     return dict(row) if row else None
 
 
+def list_budgets(
+    conn: sqlite3.Connection,
+    month: str,
+    user_id: str = DEFAULT_USER,
+) -> list[dict[str, Any]]:
+    """返回该月全部预算（category 空串表示总额预算，调用方自行转 None）。"""
+    rows = conn.execute(
+        "SELECT id, category, month, amount_cents FROM budgets "
+        "WHERE user_id = ? AND month = ? ORDER BY category = '' DESC, id",
+        (user_id, month),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_budget_row(
+    conn: sqlite3.Connection,
+    month: str,
+    category: str | None = None,
+    user_id: str = DEFAULT_USER,
+) -> dict[str, Any] | None:
+    """取单条预算（含 id），未设置返回 None。"""
+    row = conn.execute(
+        "SELECT id, category, month, amount_cents FROM budgets "
+        "WHERE user_id = ? AND month = ? AND category = ?",
+        (user_id, month, category or ""),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_all_records(conn: sqlite3.Connection, user_id: str = DEFAULT_USER) -> int:
+    """清空该用户全部流水，返回删除条数（演示数据重置用）。"""
+    total = count_records(conn, user_id=user_id)
+    conn.execute("DELETE FROM records WHERE user_id = ?", (user_id,))
+    conn.commit()
+    return total
+
+
+def delete_all_budgets(conn: sqlite3.Connection, user_id: str = DEFAULT_USER) -> int:
+    """清空该用户全部预算，返回删除条数（演示数据重置用）。"""
+    total = int(
+        conn.execute("SELECT COUNT(*) AS n FROM budgets WHERE user_id = ?", (user_id,))
+        .fetchone()["n"]
+    )
+    conn.execute("DELETE FROM budgets WHERE user_id = ?", (user_id,))
+    conn.commit()
+    return total
+
+
 def count_records(
     conn: sqlite3.Connection,
     start: str | None = None,
