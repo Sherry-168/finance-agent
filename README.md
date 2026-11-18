@@ -183,7 +183,10 @@ cd frontend && python app.py
 ### 8.6 自动化测试
 
 ```bash
-pytest tests -q     # 数据层 / 规则层 / 解析规则 / 查账槽位
+pytest tests -q            # 数据层 / 规则层 / 解析规则 / 查账槽位（50 passed）
+
+python scripts/smoke_api.py   # 需先启动后端：按前端客户端的调用方式跑一遍全部接口，
+                              # 并用前端渲染函数消费返回字段，验证前后端无字段错位
 ```
 
 ## 9. 团队分工（Team Division）
