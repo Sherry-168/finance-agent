@@ -1,0 +1,145 @@
+{
+  "version": "1.0",
+  "usage": "POST /api/v1/records/parse 逐条回放。expect.action: parse=直接解析成功 / clarify=必须追问缺失信息 / reject=礼貌拒绝并引导。occurred_at 断言中的 'TODAY' 表示运行日，'LAST_FRIDAY' 等相对值按运行日推算。",
+  "api_base": "/api/v1",
+  "cases": [
+    {
+      "id": "N1", "group": "正常句",
+      "input": "今天中午吃了碗牛肉面 28 块",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 28.0, "category": "餐饮", "occurred_at": "TODAY" },
+      "note": "基准用例：金额+类别+时间齐全"
+    },
+    {
+      "id": "N2", "group": "正常句",
+      "input": "昨天打车回家花了 32 块",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 32.0, "category": "交通", "occurred_at": "TODAY-1" },
+      "note": "相对时间-1天"
+    },
+    {
+      "id": "N3", "group": "正常句",
+      "input": "11 月 5 日交了话费 39 元",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 39.0, "category": "通讯", "occurred_at": "2026-11-05" },
+      "note": "绝对日期；11月5日应补全为 2026-11-05"
+    },
+    {
+      "id": "N4", "group": "正常句",
+      "input": "上周六和朋友唱 KTV 花了 288",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 288.0, "category": "娱乐", "occurred_at": "LAST_SATURDAY" },
+      "note": "模糊时间+大额娱乐"
+    },
+    {
+      "id": "N5", "group": "正常句",
+      "input": "这个月 1 号付了房租 1850",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 1850.0, "category": "居住", "occurred_at": "THIS_MONTH_01" },
+      "note": "月份内日期引用"
+    },
+    {
+      "id": "C1", "group": "缺金额",
+      "input": "昨天买了个杯子和一些水果",
+      "expect": { "action": "clarify" },
+      "missing": ["amount"],
+      "note": "无任何数字，必须追问金额，禁止猜测入库"
+    },
+    {
+      "id": "C2", "group": "缺金额",
+      "input": "前天下午看了场电影",
+      "expect": { "action": "clarify" },
+      "missing": ["amount"],
+      "note": "类别可推断但金额缺失"
+    },
+    {
+      "id": "C3", "group": "缺金额",
+      "input": "上个月买了不少日用品",
+      "expect": { "action": "clarify" },
+      "missing": ["amount"],
+      "note": "时间和类别都模糊，金额缺失"
+    },
+    {
+      "id": "C4", "group": "缺时间",
+      "input": "打车去机场 58 块",
+      "expect": { "action": "clarify" },
+      "missing": ["occurred_at"],
+      "note": "应追问或明确声明按今天记；不能猜成昨天"
+    },
+    {
+      "id": "C5", "group": "缺时间",
+      "input": "网购了一本技术书 89 元",
+      "expect": { "action": "clarify" },
+      "missing": ["occurred_at"],
+      "note": "网购不可推断消费当天"
+    },
+    {
+      "id": "C6", "group": "缺时间",
+      "input": "给爸妈买了点补品花了 356",
+      "expect": { "action": "clarify" },
+      "missing": ["occurred_at"],
+      "note": "类别模糊+时间缺失，双重澄清"
+    },
+    {
+      "id": "F1", "group": "模糊时间",
+      "input": "上周五和同事聚餐花了 126 块",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 126.0, "category": "餐饮", "occurred_at": "LAST_FRIDAY" },
+      "note": "上周五 = 上周的星期五，不是本周最近一个周五"
+    },
+    {
+      "id": "F2", "group": "模糊时间",
+      "input": "前天买咖啡 22 块",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 22.0, "category": "餐饮", "occurred_at": "TODAY-2" },
+      "note": "前天 = 今天-2"
+    },
+    {
+      "id": "F3", "group": "模糊时间",
+      "input": "大前天加了 95 号汽油 300 元",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 300.0, "occurred_at": "TODAY-3" },
+      "note": "大前天 = 今天-3；类别应为交通"
+    },
+    {
+      "id": "U1", "group": "金额单位",
+      "input": "昨天给游戏充了 3k",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 3000.0, "occurred_at": "TODAY-1" },
+      "note": "3k = 3000.00；大额，可触发预警演示"
+    },
+    {
+      "id": "U2", "group": "金额单位",
+      "input": "今天早饭三十二块",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 32.0, "occurred_at": "TODAY" },
+      "note": "中文数字 三十二 = 32"
+    },
+    {
+      "id": "U3", "group": "金额单位",
+      "input": "上周五买了副耳机 1.5k",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 1500.0, "occurred_at": "LAST_FRIDAY" },
+      "note": "小数+k 组合"
+    },
+    {
+      "id": "U4", "group": "金额单位",
+      "input": "昨天坐公交两块五",
+      "expect": { "action": "parse" },
+      "expect_fields": { "amount": 2.5, "category": "交通", "occurred_at": "TODAY-1" },
+      "note": "中文小数 两块五 = 2.50"
+    },
+    {
+      "id": "X1", "group": "无意义输入",
+      "input": "哈哈哈哈哈哈哈哈",
+      "expect": { "action": "reject" },
+      "note": "不得入库、不得崩溃、不得返回 code=0 的空数据"
+    },
+    {
+      "id": "X2", "group": "无意义输入",
+      "input": "今天天气怎么样？帮我写一首诗",
+      "expect": { "action": "reject" },
+      "note": "非记账意图，礼貌引导回记账场景"
+    }
+  ]
+}
