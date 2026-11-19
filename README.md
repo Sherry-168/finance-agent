@@ -56,7 +56,7 @@ finance-agent/
 │   ├── main.py             # 应用装配：生命周期建库、全局异常处理、路由注册
 │   ├── core/               # 基础设施：配置、响应包装、数据库连接
 │   ├── adapters/           # 解析接缝层（规则解析 / LLM 解析，对外统一 parse_text）
-│   └── routers/            # HTTP 路由：health / records / query / stats / budgets / meta / demo
+│   └── routers/            # HTTP 路由：health / records / query / stats / budgets / meta / demo / ocr
 ├── db/                     # 数据层：建表 SQL + DAO
 ├── logic/                  # 规则层：金额换算、分类词典、统计、预算、查账槽位（纯函数）
 ├── frontend/               # Gradio 前端（api 客户端 / ui 组件 / Tab）
@@ -88,6 +88,34 @@ docker compose up --build
 * **前端界面**：http://localhost:7860/
 * **后端健康检查**：http://localhost:8000/api/v1/health
 * **后端接口文档**：http://localhost:8000/docs
+
+### 前端页面预览
+
+前端共 5 个 Tab，启动后访问 http://localhost:7860/ 即可切换：
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ 记账小助手 · 说一句话记账，问一句话查账                     │
+├──────────┬──────────┬──────────┬──────────┬──────────────┤
+│ 记账对话 │ 明细管理 │ 统计图表 │ 预算中心 │ 演示入口      │
+├──────────┴──────────┴──────────┴──────────┴──────────────┤
+│ Tab1: 聊天流 + 胶囊输入栏（加号菜单）+ 草稿确认卡 + 查账表格 │
+│ Tab2: 日期/类别筛选 + 分页明细 + 行内修改/删除            │
+│ Tab3: 月度指标卡 + ECharts 类别饼图/每日趋势折线          │
+│ Tab4: 预算设定 + 已设预算清单 + 三态进度预警              │
+│ Tab5: 一键灌入/清空演示数据 + 后端连通性自检              │
+└──────────────────────────────────────────────────────────┘
+```
+
+| Tab | 主要接口 | 说明 |
+|---|---|---|
+| 记账对话 | `/records/parse`、`/query`、`/records/ocr`、`/records` | 记账语句出草稿；问句只展示后端 `answer_text`/`table`；小票支持多笔勾选 |
+| 明细管理 | `GET/PUT/DELETE /records` | 分页、筛选、修正、二次确认删除 |
+| 统计图表 | `/stats/summary`、`/stats/by-category`、`/stats/trend` | 图表数据全部来自后端聚合 |
+| 预算中心 | `POST/GET /budgets`、`/budgets/alerts`、`/categories` | 类别/总额双维度，80% 预警、100% 超支 |
+| 演示入口 | `/health`、`/demo/load`、`/demo/reset` | 无 Key 评审环境一键体验全链路 |
+
+> 页面截图：当前开发环境没有浏览器自动化工具，无法生成真实截图；请在可浏览环境打开前端后，将各 Tab 截图保存到 `docs/screenshots/` 并在本表补充引用。
 
 > **数据持久化**：`docker-compose.yml` 用**目录挂载**（宿主 `./data` ⇄ 容器 `/app/data`），数据库文件为容器内 `/app/data/finance.db`，容器重建、镜像升级都不丢数据。
 > 由于是绑定挂载，`docker compose down -v` **不会**删除数据；要清空数据请删除宿主 `data/finance.db`，或在界面「演示数据」页点击「清空演示数据」（等价于调用 `POST /demo/reset`）。

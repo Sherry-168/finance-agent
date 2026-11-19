@@ -63,7 +63,7 @@ def create_app() -> gr.Blocks:
         budget_tab_item.select(
             budget_handles["initial_load"],
             inputs=None,
-            outputs=budget_handles["progress_output"],
+            outputs=budget_handles["initial_outputs"],
         )
 
         gr.HTML(c.footer_note())

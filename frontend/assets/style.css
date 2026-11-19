@@ -446,3 +446,163 @@ footer {
 .fa-chat .message {
     box-shadow: none !important;
 }
+
+/* ------------------------------ 聊天输入栏（聊天 App 风格） ------------------------------ */
+.fa-composer-wrap {
+    margin-top: 10px !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+.fa-composer {
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 7px 12px !important;
+    border: 1px solid #dce8e5 !important;
+    border-radius: 999px !important;
+    background: #ffffff !important;
+    box-shadow: 0 6px 18px rgba(20, 35, 31, .07) !important;
+    flex-wrap: nowrap !important;
+}
+
+.fa-composer > div {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+.fa-plus-btn button,
+.fa-send-btn button,
+.fa-scan-btn button,
+.fa-clear-btn button {
+    border: none !important;
+    box-shadow: none !important;
+    font-weight: 700 !important;
+    transition: transform .15s ease, filter .15s ease;
+}
+
+.fa-plus-btn button:hover,
+.fa-send-btn button:hover,
+.fa-scan-btn button:hover,
+.fa-clear-btn button:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+}
+
+.fa-plus-btn button {
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    border-radius: 50% !important;
+    background: #00b06b !important;
+    color: #ffffff !important;
+    font-size: 28px !important;
+    line-height: 1 !important;
+}
+
+.fa-send-btn button {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border-radius: 50% !important;
+    background: #00b06b !important;
+    color: #ffffff !important;
+    font-size: 18px !important;
+}
+
+.fa-scan-btn button,
+.fa-clear-btn button {
+    width: 38px !important;
+    min-width: 34px !important;
+    height: 38px !important;
+    border-radius: 50% !important;
+    background: #f1f7f5 !important;
+    color: #0f766e !important;
+    font-size: 19px !important;
+}
+
+.fa-clear-btn button {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    font-size: 16px !important;
+    opacity: .75;
+}
+
+.fa-voice {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 40px;
+    color: #00b06b;
+    flex: none;
+}
+
+.fa-composer-input textarea,
+.fa-composer-input input {
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    background: transparent !important;
+    font-size: 14.5px !important;
+    padding: 0 !important;
+    min-height: 24px !important;
+}
+
+.fa-composer-input label,
+.fa-composer .fa-composer-input > label {
+    display: none !important;
+}
+
+/* 加号展开的导入菜单 */
+.fa-plus-menu {
+    margin-top: 10px !important;
+    padding: 14px 16px !important;
+    border: 1px solid var(--fa-border) !important;
+    border-radius: 18px !important;
+    background: #ffffff !important;
+    box-shadow: var(--fa-shadow) !important;
+}
+
+.fa-menu-hint {
+    font-size: 12px;
+    color: var(--fa-muted);
+    margin-bottom: 10px;
+}
+
+.fa-plus-menu-row {
+    gap: 12px !important;
+    align-items: stretch !important;
+}
+
+.fa-plus-menu .fa-menu-tile {
+    border: 1px solid #e3ece9 !important;
+    border-radius: 16px !important;
+    background: #fbfdfc !important;
+    min-height: 110px !important;
+    padding: 14px 8px !important;
+    text-align: center !important;
+    box-shadow: none !important;
+}
+
+.fa-plus-menu .fa-menu-tile label,
+.fa-plus-menu .fa-menu-tile .label {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--fa-ink) !important;
+}
+
+.fa-plus-menu .fa-menu-tile button {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--fa-ink) !important;
+}
+
+.fa-plus-menu .fa-menu-tile.is-disabled {
+    opacity: .45;
+    cursor: not-allowed !important;
+}

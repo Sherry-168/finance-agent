@@ -68,12 +68,34 @@ def load_alerts(month: str):
     return (c.budget_progress(items, notice),)
 
 
+def load_budgets(month: str):
+    """GET /budgets：展示当月已设预算清单。"""
+    month = (month or "").strip()
+    if not _MONTH_RE.match(month):
+        return (c.tip("月份格式应为 YYYY-MM，例如 2026-11。", kind="error"),)
+    try:
+        data = api.list_budgets(month)
+        notice = ""
+    except api.ApiError as exc:
+        if api.should_fallback(exc):
+            data = mock.list_budgets(month)
+            notice = mock.NOTICE
+        else:
+            return (c.tip(f"预算列表获取失败：{exc.message}", kind="error"),)
+    return (c.budget_list((data or {}).get("items") or [], notice),)
+
+
+def load_budget_data(month: str):
+    """刷新进度 + 已设预算列表。"""
+    return load_alerts(month)[0], load_budgets(month)[0]
+
+
 def save_and_refresh(month, category, amount):
-    """保存成功后立即刷新进度卡。"""
+    """保存成功后立即刷新进度卡与预算清单。"""
     status, refresh_month = _save_budget(month, category, amount)
-    if refresh_month is None:
-        return status, load_alerts(month)[0]
-    return status, load_alerts(refresh_month)[0]
+    target_month = refresh_month or month
+    progress, listing = load_budget_data(target_month)
+    return status, progress, listing
 
 
 def _category_choices() -> list[str]:
@@ -111,17 +133,18 @@ def build_budget_tab() -> dict:
         with gr.Column(scale=3):
             gr.HTML(c.section_head("预算进度与提醒", "已用 ≥80% 预警、≥100% 超支"))
             progress_area = gr.HTML(c.budget_placeholder())
+            budget_list_area = gr.HTML(c.budget_list([]))
 
     status_area = gr.HTML(
-        c.empty_state("预算状态", "保存预算后在此显示结果；右侧进度卡随保存自动刷新。")
+        c.empty_state("预算状态", "保存预算后在此显示结果；右侧进度与清单随保存自动刷新。")
     )
 
-    stats_outputs = [status_area, progress_area]
+    stats_outputs = [status_area, progress_area, budget_list_area]
     save_btn.click(save_and_refresh, inputs=[month_input, category_input, amount_input], outputs=stats_outputs)
-    refresh_btn.click(load_alerts, inputs=[month_input], outputs=[progress_area])
+    refresh_btn.click(load_budget_data, inputs=[month_input], outputs=[progress_area, budget_list_area])
 
     def initial_load():
-        return load_alerts(today)[0]
+        return load_budget_data(today)
 
     return {
         "month_input": month_input,
@@ -130,7 +153,8 @@ def build_budget_tab() -> dict:
         "save_btn": save_btn,
         "refresh_btn": refresh_btn,
         "progress_area": progress_area,
+        "budget_list_area": budget_list_area,
         "status_area": status_area,
         "initial_load": initial_load,
-        "progress_output": [progress_area],
+        "initial_outputs": [progress_area, budget_list_area],
     }
