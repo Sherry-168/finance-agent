@@ -47,4 +47,50 @@
   }
 ]
 ```
+
+## 4,1 结构化输出 Schema
+```json
+{
+  "type": "object",
+  "properties": {
+    "time_range": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["餐饮", "交通", "购物", "居住", "娱乐", "医疗", "教育", "其他"]
+      }
+    },
+    "agg": {
+      "type": "string",
+      "enum": ["sum", "count", "max"]
+    },
+    "group_by": {
+      "type": ["string", "null"],
+      "enum": ["category", null]
+    }
+  },
+  "required": ["categories", "agg", "group_by"]
+}
+```
+
+## 4.2查账解析 Prompt 
+```text
+你是一个专业的财务数据查询助手。用户会用自然语言向你提问关于消费统计的问题。你的任务是解析用户的意图，将其转化为后端的 SQL 查询条件（槽位）。
+ 
+【当前时间信息】
+系统当前时间为：{{current_time}}（请以此为基准，精准计算“上个月”、“这个月”等相对时间）。
+ 
+【核心规则】（必须严格遵守）：
+1. time_range: 时间范围。必须输出包含两个日期的绝对时间数组 [开始日期, 结束日期]，格式为 "YYYY-MM-DD"。
+	• 时间区间为左闭右开 [start, end)：包含开始日期当天，不包含结束日期当天。所以如果用户问“上个月”，输出应为 ["2025-10-01", "2025-11-01"]。
+	• 如果没提时间，输出 null。
+2. categories: 消费类别。提取用户提到的类别。如果没有提到具体类别，输出空数组 []。
+3. agg: 聚合方式。必须严格从以下三个值中选一个："sum" (金额), "count" (笔数), "max" (极值)。
+4. group_by: 分组方式。问“哪类花得最多”输出 "category"；否则填 null。
 ```
