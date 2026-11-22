@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import calendar
 import datetime as dt
 import json
 import re
@@ -37,6 +38,18 @@ _DAY_WORDS = {"大前天": 3, "前天": 2, "昨天": 1, "昨日": 1, "今天": 0
 _DATE_FULL = re.compile(r"(\d{4})\s*[年/-]\s*(\d{1,2})\s*[月/-]\s*(\d{1,2})")
 _DATE_MONTH_DAY = re.compile(r"(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?")
 _DATE_SHORT = re.compile(r"(?<!\d)(\d{1,2})\s*[-/]\s*(\d{1,2})(?!\d)")
+# 「上周五 / 本周六 / 下周一」：周几按自然周（周一~周日）计算
+_DATE_WEEK = re.compile(r"(上|本|这|下)\s*(?:周|星期|礼拜)\s*([一二三四五六日天1-7])")
+# 「这个月 1 号 / 上个月 15 号 / 下月 3 日」
+_DATE_MONTH_DAY_LABEL = re.compile(r"(这个月|本月|当月|上个月|上月|下个月|下月)\s*(\d{1,2})\s*[日号]")
+# 中文小数金额：「两块五」→ 2.5（尾数按「角」处理，可带「毛/角」）
+_CN_DECIMAL = re.compile(r"([零一二三四五六七八九十百两]+)\s*(?:块钱|块|元)\s*([零一二三四五六七八九])\s*[毛角]?")
+# 记账意图提示：用于区分「缺金额待澄清」与「完全非记账输入」
+_EXPENSE_HINT = re.compile(r"买|花|付|交|吃|喝|坐|打|充|消费|开销|支出|付款|缴费|记一笔")
+_WEEKDAY_NUM = {
+    "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 7, "天": 7,
+    "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7,
+}
 
 
 def _cn_to_number(text: str) -> float | None:
@@ -66,6 +79,14 @@ def _extract_amount(text: str) -> float | None:
             value *= _UNIT_FACTOR[unit]
         return round(value, 2)
 
+    # 「两块五」这类中文小数要先于「两块」匹配，否则 0.5 会被丢掉
+    dec = _CN_DECIMAL.search(text)
+    if dec:
+        whole = _cn_to_number(dec.group(1))
+        frac = _CN_DIGIT.get(dec.group(2))
+        if whole is not None and frac is not None:
+            return round(whole + frac / 10, 2)
+
     cn = _CN_WITH_UNIT.search(text)
     if cn:
         value = _cn_to_number(cn.group(1))
@@ -87,6 +108,41 @@ def _extract_date(text: str, today: dt.date | None = None) -> str | None:
         if word in text:
             return (today - dt.timedelta(days=offset)).isoformat()
 
+    # 「上周五」指上周（周一~周日）的周五，不是从今天往回最近的一个周五
+    week = _DATE_WEEK.search(text)
+    if week:
+        prefix, token = week.group(1), week.group(2)
+        weekday = _WEEKDAY_NUM.get(token)
+        if weekday:
+            monday = today - dt.timedelta(days=today.weekday())
+            if prefix == "上":
+                monday -= dt.timedelta(days=7)
+            elif prefix == "下":
+                monday += dt.timedelta(days=7)
+            try:
+                return (monday + dt.timedelta(days=weekday - 1)).isoformat()
+            except OverflowError:
+                return None
+
+    # 「这个月 1 号」「上个月 15 号」「下月 3 日」
+    labeled = _DATE_MONTH_DAY_LABEL.search(text)
+    if labeled:
+        label, day_text = labeled.group(1), labeled.group(2)
+        if label in ("这个月", "本月", "当月"):
+            year, month = today.year, today.month
+        elif label in ("上个月", "上月"):
+            first = today.replace(day=1)
+            prev = first - dt.timedelta(days=1)
+            year, month = prev.year, prev.month
+        else:
+            year, month = (today.year + 1, 1) if today.month == 12 else (today.year, today.month + 1)
+        # 遇到「2 月 30 号」这类不存在的日期，收敛到当月最后一天而不是静默丢掉
+        day = min(int(day_text), calendar.monthrange(year, month)[1])
+        try:
+            return dt.date(year, month, day).isoformat()
+        except ValueError:
+            return None
+
     for pattern, groups in ((_DATE_FULL, 3), (_DATE_MONTH_DAY, 2), (_DATE_SHORT, 2)):
         match = pattern.search(text)
         if not match:
@@ -97,7 +153,8 @@ def _extract_date(text: str, today: dt.date | None = None) -> str | None:
         else:
             month, day = parts
             year = today.year
-            # 「1 月 5 日」在 12 月说出来通常指明年，避免跨年误解
+            # 记账多为补记过去的账单：所说月份晚于当前月份时按去年处理
+            # （如 1 月说「11 月 5 日」→ 去年 11 月；12 月说「1 月 5 日」→ 今年 1 月）
             if month > today.month:
                 year -= 1
         try:
@@ -217,7 +274,26 @@ def _llm_parse(text: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------- 对外入口
 
 
+def _is_rejected(text: str) -> bool:
+    """识别非记账输入（纯灌水 / 天气写诗等），避免返回 code=0 的空白草稿。
+
+    判定保持一致口径：既没有金额、也没有命中任何类别关键词、且不含记账动词时，
+    视为非记账意图。缺金额但说了「水果 / 电影 / 买杯子」的仍走 clarify。
+    """
+    content = (text or "").strip()
+    if not content:
+        return True
+    if _extract_amount(content) is not None or classify(content) != "其他":
+        return False
+    return not _EXPENSE_HINT.search(content)
+
+
 def parse_text(text: str) -> dict[str, Any]:
     """把一句话解析成槽位。LLM 失败时静默降级到规则，返回结构始终一致。"""
     result = _llm_parse(text)
-    return result if result is not None else _rule_parse(text)
+    if result is None:
+        result = _rule_parse(text)
+    if _is_rejected(text):
+        result = dict(result)
+        result["_rejected"] = True
+    return result

@@ -25,7 +25,8 @@ GREETING = (
     "信息不全时我会反问你，补齐后在右侧确认卡核对入库。"
 )
 
-_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# 契约允许纯日期或带时分（小票 OCR 草稿会带时间），见 docs/api.md §2.2
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}(?::\d{2})?)?$")
 # 命中这些词视为查账问句，交给后端 /query；其余输入仍走记账解析
 _QUERY_KEYWORDS = (
     "多少", "几笔", "几元", "占比", "比例", "趋势", "走势", "最多", "排行",
@@ -274,7 +275,7 @@ def confirm_record(draft: dict | None, amount, category, merchant, occurred_at, 
         return history, draft, c.tip("类别不能为空，请从 8 类固定枚举中选择。", kind="error"), gr.update(visible=True)
     occurred_at = (occurred_at or "").strip()
     if not _DATE_RE.match(occurred_at):
-        return history, draft, c.tip("消费时间格式应为 YYYY-MM-DD，例如 2026-11-16。", kind="error"), gr.update(visible=True)
+        return history, draft, c.tip("消费时间格式应为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM，例如 2026-11-16 09:30。", kind="error"), gr.update(visible=True)
 
     payload = {
         "draft_id": draft.get("draft_id"),
@@ -334,9 +335,10 @@ def reset_all():
     )
 
 
-def scan_receipt(photo_file, album_file, history: list):
-    """扫描图标：对最近一次选择的小票图片重新识别。"""
-    return recognize_receipt(album_file or photo_file, history)
+def voice_placeholder(history: list):
+    """语音输入占位：提示即将上线，不改变现有对话内容。"""
+    tip = c.tip("语音输入即将上线，目前请先用文字输入或点「＋」上传小票。")
+    return (history or []) + [{"role": "assistant", "content": tip}]
 
 
 def toggle_ocr_menu(visible: bool):
@@ -367,60 +369,70 @@ def build_chat_tab() -> dict:
                 elem_classes=["fa-chat"],
             )
 
-            # 类似聊天 App 的底部输入栏：加号 / 语音 / 文本 / 扫描 / 头像
+            # 底部输入栏：＋ 展开附件面板 / 文本输入 / 语音输入占位 / 发送。
+            # 图标统一用 CSS 数据 URI 绘制（见 style.css），避免系统字体把 ＋/➤/▣
+            # 这类符号渲染成与文字重叠的图形。
             with gr.Group(elem_classes=["fa-composer-wrap"]):
                 with gr.Row(elem_classes=["fa-composer"]):
                     plus_btn = gr.Button(
-                        "＋", elem_classes=["fa-plus-btn"], min_width=46, scale=0
-                    )
-                    gr.HTML(
-                        '<span class="fa-voice" title="语音占位">'
-                        '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">'
-                        '<path d="M4 9v6M8 6v12M12 3v18M16 7v10M20 10v4" '
-                        'fill="none" stroke="currentColor" stroke-width="2.2" '
-                        'stroke-linecap="round"/></svg></span>'
+                        "＋",
+                        elem_classes=["fa-icon-btn fa-plus-btn"],
+                        min_width=42,
+                        scale=0,
                     )
                     text_input = gr.Textbox(
                         show_label=False,
-                        placeholder="文字记录或按住语音记录",
+                        placeholder="说一句话记一笔…",
                         lines=1,
                         max_lines=3,
                         scale=1,
                         container=False,
                         elem_classes=["fa-composer-input"],
                     )
+                    voice_btn = gr.Button(
+                        "🎤",
+                        elem_classes=["fa-icon-btn fa-voice-btn"],
+                        min_width=36,
+                        scale=0,
+                    )
                     send_btn = gr.Button(
-                        "➤", elem_classes=["fa-send-btn"], min_width=38, scale=0
-                    )
-                    ocr_btn = gr.Button(
-                        "▣", elem_classes=["fa-scan-btn"], min_width=38, scale=0
-                    )
-                    clear_btn = gr.Button(
-                        "⌫", elem_classes=["fa-clear-btn"], min_width=30, scale=0
+                        "➤",
+                        elem_classes=["fa-icon-btn fa-send-btn"],
+                        min_width=42,
+                        scale=0,
                     )
 
-                with gr.Group(visible=False, elem_classes=["fa-plus-menu"]) as ocr_menu:
-                    gr.HTML('<div class="fa-menu-hint">选择导入方式</div>')
-                    with gr.Row(elem_classes=["fa-plus-menu-row"]):
+                # 参考 DeepSeek 的「＋」弹出菜单：锚定在输入栏上方的小浮层，
+                # 用「圆形图标 + 文案 + 右侧说明」的列表行，而不是大块方形磁贴。
+                with gr.Group(visible=False, elem_classes=["fa-attach-panel"]) as ocr_menu:
+                    gr.HTML('<div class="fa-attach-title">添加内容</div>')
+                    with gr.Column(elem_classes=["fa-attach-list"]):
                         photo_file = gr.File(
                             label="拍照识别",
                             file_types=["image"],
                             interactive=True,
-                            elem_classes=["fa-menu-tile"],
-                            scale=1,
+                            elem_classes=["fa-attach-item fa-item-photo"],
                         )
                         album_file = gr.File(
                             label="相册识别",
                             file_types=["image"],
                             interactive=True,
-                            elem_classes=["fa-menu-tile"],
-                            scale=1,
+                            elem_classes=["fa-attach-item fa-item-album"],
                         )
                         gr.Button(
                             "Excel 导入",
                             interactive=False,
-                            elem_classes=["fa-menu-tile is-disabled"],
-                            scale=1,
+                            elem_classes=["fa-attach-item fa-item-excel"],
+                        )
+                    with gr.Row(elem_classes=["fa-attach-foot"]):
+                        gr.HTML(
+                            '<span class="fa-attach-note">Excel 导入为占位入口，暂未开放</span>'
+                        )
+                        clear_btn = gr.Button(
+                            "清空对话与草稿",
+                            elem_classes=["fa-text-btn"],
+                            min_width=0,
+                            scale=0,
                         )
 
         with gr.Column(scale=2):
@@ -449,7 +461,7 @@ def build_chat_tab() -> dict:
     gr.HTML(
         c.tip(
             "交互约定：问句（含「多少 / 占比 / 趋势」等）走查账接口，只展示后端算好的回答与表格；"
-            "记账语句生成草稿，确认后才入库；加号里可选择拍照 / 相册小票识别。"
+            "记账语句生成草稿，确认后才入库；点「＋」可使用拍照 / 相册小票识别，Excel 导入为占位入口。"
         )
     )
 
@@ -482,10 +494,10 @@ def build_chat_tab() -> dict:
     ocr_event_outputs = [chatbot, *ocr_outputs]
     photo_file.change(recognize_receipt, inputs=[photo_file, chatbot], outputs=ocr_event_outputs)
     album_file.change(recognize_receipt, inputs=[album_file, chatbot], outputs=ocr_event_outputs)
-    ocr_btn.click(
-        scan_receipt,
-        inputs=[photo_file, album_file, chatbot],
-        outputs=ocr_event_outputs,
+    voice_btn.click(
+        voice_placeholder,
+        inputs=[chatbot],
+        outputs=[chatbot],
     )
     ocr_confirm_btn.click(
         confirm_ocr,
@@ -512,7 +524,7 @@ def build_chat_tab() -> dict:
         "photo_file": photo_file,
         "album_file": album_file,
         "ocr_menu": ocr_menu,
-        "ocr_btn": ocr_btn,
+        "voice_btn": voice_btn,
         "ocr_choices": ocr_choices,
         "ocr_confirm_btn": ocr_confirm_btn,
         "ocr_discard_btn": ocr_discard_btn,

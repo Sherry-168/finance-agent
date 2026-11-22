@@ -1,7 +1,8 @@
 """演示数据路由：一键灌入示例账单与预算、清空演示数据。
 
 面向评审场景：无需自造数据即可跑通「明细 / 统计 / 预算」三条主链路。
-示例账单来自 `data/sample_transactions.csv`（Excel 导出常带 BOM，按 utf-8-sig 读取）。
+示例账单优先使用 `demo_bills.csv`（60 笔 / 2 个月，对齐方案文档 §8 与 docs/api.md），
+缺失时回退到旧的 `data/sample_transactions.csv`。两者均按 utf-8-sig 读取以兼容 Excel BOM。
 """
 from __future__ import annotations
 
@@ -20,7 +21,8 @@ from logic.money import yuan_to_cents
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 
-SAMPLE_CSV = PROJECT_ROOT / "data" / "sample_transactions.csv"
+SAMPLE_CSV = PROJECT_ROOT / "demo_bills.csv"
+LEGACY_SAMPLE_CSV = PROJECT_ROOT / "data" / "sample_transactions.csv"
 
 # 演示预算：刻意覆盖 normal / warning / over 三态，方便答辩展示预警效果
 _DEMO_BUDGETS: list[tuple[str | None, int]] = [
@@ -33,11 +35,12 @@ _DEMO_BUDGETS: list[tuple[str | None, int]] = [
 
 def _read_sample_rows() -> list[dict[str, Any]]:
     """读取示例账单 CSV，返回可直接入库的记录列表（金额已转「分」）。"""
-    if not SAMPLE_CSV.exists():
-        raise ApiError(NOT_FOUND, "示例账单缺失：data/sample_transactions.csv")
+    csv_path = SAMPLE_CSV if SAMPLE_CSV.exists() else LEGACY_SAMPLE_CSV
+    if not csv_path.exists():
+        raise ApiError(NOT_FOUND, "示例账单缺失：demo_bills.csv / data/sample_transactions.csv")
 
     records: list[dict[str, Any]] = []
-    with SAMPLE_CSV.open(encoding="utf-8-sig", newline="") as handle:
+    with csv_path.open(encoding="utf-8-sig", newline="") as handle:
         for row in csv.DictReader(handle):
             if not row.get("date") or not row.get("amount"):
                 continue

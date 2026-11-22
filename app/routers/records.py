@@ -101,6 +101,25 @@ def _next_draft_id() -> str:
 def parse_record(payload: ParseRequest) -> dict[str, Any]:
     """把一句话解析成草稿，绝不入库；槽位不全时以 clarify_question 反问。"""
     fields = parse_text(payload.text)
+    # 非记账输入（灌水 / 天气写诗等）：不生成草稿，只礼貌引导回记账场景
+    if fields.get("_rejected"):
+        return ok(
+            {
+                "draft_id": _next_draft_id(),
+                "fields": {
+                    "amount": None,
+                    "category": None,
+                    "merchant": None,
+                    "occurred_at": None,
+                    "note": None,
+                },
+                "confidence": 0.0,
+                "missing_fields": [],
+                "clarify_question": "我只能帮你记一笔支出哦～比如「昨天打车 32 块」，换个说法试试？",
+                "action": "reject",
+            }
+        )
+
     values: dict[str, Any] = {
         "amount": fields.get("amount"),
         "category": normalize_category(fields.get("category")),

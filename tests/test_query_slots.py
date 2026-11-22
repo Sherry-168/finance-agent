@@ -44,6 +44,12 @@ def test_trend_intent():
     assert slots["group_by"] == "date"
 
 
+def test_day_before_yesterday_slots():
+    slots = extract_slots("前天买咖啡花了多少", TODAY)
+    assert slots["time_expr"] == "前天"
+    assert (slots["start"], slots["end"]) == ("2026-11-16", "2026-11-17")
+
+
 def test_unknown_time_falls_back_to_current_month():
     slots = extract_slots("我花了多少钱", TODAY)
     assert slots["time_expr"] == "本月"

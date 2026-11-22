@@ -34,6 +34,18 @@ def test_this_week():
     assert end == "2026-11-14"
 
 
+def test_day_before_yesterday():
+    start, end = resolve_time_range("前天", today=date(2026, 11, 13))
+    assert start == "2026-11-11"
+    assert end == "2026-11-12"
+
+
+def test_three_days_before_yesterday():
+    start, end = resolve_time_range("大前天", today=date(2026, 11, 13))
+    assert start == "2026-11-10"
+    assert end == "2026-11-11"
+
+
 def test_unknown_falls_back_to_this_month():
     start, end = resolve_time_range("随便", today=date(2026, 11, 13))
     assert start == "2026-11-01"
