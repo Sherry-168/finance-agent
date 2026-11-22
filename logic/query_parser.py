@@ -52,6 +52,10 @@ def resolve_time_range(expr: str, today: date | None = None) -> tuple[str, str]:
         return _d(today), _d(today + timedelta(days=1))
     if e in ("昨天", "昨日", "yesterday"):
         return _d(today - timedelta(days=1)), _d(today)
+    if e in ("前天",):
+        return _d(today - timedelta(days=2)), _d(today - timedelta(days=1))
+    if e in ("大前天",):
+        return _d(today - timedelta(days=3)), _d(today - timedelta(days=2))
     if e in ("本周", "这周", "this week"):
         monday = today - timedelta(days=today.weekday())
         return _d(monday), _d(today + timedelta(days=1))
@@ -123,6 +127,7 @@ _TIME_PATTERNS: list[tuple[str, str]] = [
     (r"这个星期|这个礼拜|这周|本周", "本周"),
     (r"去年", "去年"),
     (r"今年", "今年"),
+    (r"大前天", "大前天"),
     (r"前天", "前天"),
     (r"昨天|昨日", "昨天"),
     (r"今天|今日", "今天"),

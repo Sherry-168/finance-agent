@@ -21,8 +21,8 @@
       "id": "N3", "group": "正常句",
       "input": "11 月 5 日交了话费 39 元",
       "expect": { "action": "parse" },
-      "expect_fields": { "amount": 39.0, "category": "通讯", "occurred_at": "2026-11-05" },
-      "note": "绝对日期；11月5日应补全为 2026-11-05"
+      "expect_fields": { "amount": 39.0, "category": "居住", "occurred_at": "2026-11-05" },
+      "note": "绝对日期；11月5日应补全为 2026-11-05；话费属居住（缴费类），冻结的 8 类中没有「通讯」"
     },
     {
       "id": "N4", "group": "正常句",

@@ -90,14 +90,27 @@ footer {
     display: flex;
     align-items: baseline;
     gap: 10px;
-    margin: 2px 0 10px;
+    margin: 2px 0 12px;
 }
 
 .fa-section-title {
-    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
     font-weight: 650;
     color: var(--fa-ink);
     margin: 0;
+}
+
+/* 用一个小圆点代替生硬的左边框，作为区块标题的视觉锚点 */
+.fa-section-title::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--fa-primary);
+    flex: none;
 }
 
 .fa-section-desc {
@@ -199,12 +212,11 @@ footer {
 
 /* ------------------------------ 草稿确认卡 ------------------------------ */
 .fa-draft {
-    background: var(--fa-surface);
-    border: 1px solid var(--fa-border);
-    border-left: 4px solid var(--fa-primary);
-    border-radius: 12px;
-    padding: 14px 16px;
-    box-shadow: var(--fa-shadow);
+    background: var(--fa-surface) !important;
+    border: 1px solid rgba(15, 118, 110, .08) !important;
+    border-radius: 16px !important;
+    padding: 16px !important;
+    box-shadow: 0 1px 2px rgba(20, 35, 31, .03), 0 10px 26px rgba(20, 35, 31, .06) !important;
 }
 
 .fa-draft-head {
@@ -374,11 +386,11 @@ footer {
 
 /* ------------------------------ Gradio 微调 ------------------------------ */
 .fa-panel {
-    background: var(--fa-surface);
-    border: 1px solid var(--fa-border);
-    border-radius: var(--fa-radius);
-    padding: 14px 16px;
-    box-shadow: var(--fa-shadow);
+    background: var(--fa-surface) !important;
+    border: none !important;
+    border-radius: 18px !important;
+    padding: 16px 18px !important;
+    box-shadow: 0 1px 2px rgba(20, 35, 31, .03), 0 16px 40px rgba(20, 35, 31, .06) !important;
 }
 
 .fa-chat .message-wrap {
@@ -415,13 +427,85 @@ footer {
 }
 
 /* ------------------------------ 聊天气泡 ------------------------------ */
-/* 用户侧：品牌色实心；AI 侧：浅底描边。选择器多写几组以兼容 Gradio 版本差异 */
+/* 参考 shadcn / chatcn 的轻量气泡：靠留白和柔和投影分层，不靠加粗描边。
+   用户侧品牌色实心、AI 侧白底，圆角大且各留一个“尖角”指向对方。 */
+.fa-chat .message-row,
+.fa-chat .message-wrap {
+    gap: 10px !important;
+}
+
+.fa-chat {
+    background: transparent !important;
+}
+
+/* Gradio Chatbot 自带浮动标题和右上角工具条（灰边 + 小阴影），在自定义气泡里是多余的一圈 */
+.fa-chat label[data-testid="block-label"],
+.fa-chat .icon-button-wrapper.top-panel,
+.fa-chat .message-buttons {
+    display: none !important;
+}
+
+.fa-chat .wrap,
+.fa-chat .bubble-wrap,
+.fa-chat .wrapper {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+.fa-chat .message {
+    padding: 11px 15px !important;
+    font-size: 13.5px !important;
+    line-height: 1.75 !important;
+    box-shadow: 0 1px 2px rgba(20, 35, 31, .04), 0 8px 20px rgba(20, 35, 31, .05) !important;
+}
+
+/* Gradio 6 的 message 内部还嵌套一层 .panel-full-width。
+   若不对内层复位，外层气泡规则会给它重复加 padding / 阴影，正文就被挤得显示不全。 */
+.fa-chat .message .message,
+.fa-chat .message.panel-full-width {
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+}
+
+.fa-chat .message-content,
+.fa-chat .md.chatbot,
+.fa-chat .md.chatbot p {
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.75 !important;
+}
+
+/* Markdown 渲染已经把双换行切成 <p>，这里不能再用 pre-wrap，否则段落间多出空行 */
+.fa-chat .md.chatbot p {
+    white-space: normal !important;
+}
+
+.fa-chat .message p {
+    margin: 0 0 .55em !important;
+}
+
+.fa-chat .message p:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* 查账结果里的 Markdown 表格允许横向滚动，避免把气泡撑破 */
+.fa-chat table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    font-size: 12.5px;
+}
+
 .fa-chat .message.user,
 .fa-chat .message-row.user .message,
 .fa-chat .bubble.user {
-    background: var(--fa-primary) !important;
-    border: 1px solid var(--fa-primary) !important;
-    border-radius: 14px 14px 4px 14px !important;
+    background: linear-gradient(135deg, #0f766e, #0b5c56) !important;
+    border: none !important;
+    border-radius: 18px 18px 5px 18px !important;
 }
 
 .fa-chat .message.user *,
@@ -433,9 +517,9 @@ footer {
 .fa-chat .message.bot,
 .fa-chat .message-row.bot .message,
 .fa-chat .bubble.bot {
-    background: #f4f8f7 !important;
-    border: 1px solid var(--fa-border) !important;
-    border-radius: 14px 14px 14px 4px !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(15, 118, 110, .08) !important;
+    border-radius: 18px 18px 18px 5px !important;
 }
 
 .fa-chat .message.bot *,
@@ -443,13 +527,16 @@ footer {
     color: var(--fa-ink) !important;
 }
 
-.fa-chat .message {
-    box-shadow: none !important;
-}
-
-/* ------------------------------ 聊天输入栏（聊天 App 风格） ------------------------------ */
-.fa-composer-wrap {
-    margin-top: 10px !important;
+/* ------------------------------ 聊天输入栏 ------------------------------ */
+/* 布局：＋ 附件 / 输入框 / 小票识别 / 发送。
+   注意：图标按钮的 elem_classes 落在 <button> 自身，旧版选择器写成
+   `.fa-plus-btn button` 从未命中，导致 Gradio 默认样式把符号和文字挤在一起。 */
+.fa-composer-wrap,
+.fa-composer-wrap .styler {
+    /* Gradio 的 gr.Group 默认 overflow:hidden，会把浮层菜单整个裁掉，必须放开 */
+    overflow: visible !important;
+    position: relative !important;
+    margin-top: 12px !important;
     padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
@@ -459,11 +546,11 @@ footer {
 .fa-composer {
     align-items: center !important;
     gap: 8px !important;
-    padding: 7px 12px !important;
-    border: 1px solid #dce8e5 !important;
-    border-radius: 999px !important;
+    padding: 6px 8px !important;
+    border: 1px solid rgba(15, 118, 110, .10) !important;
+    border-radius: 18px !important;
     background: #ffffff !important;
-    box-shadow: 0 6px 18px rgba(20, 35, 31, .07) !important;
+    box-shadow: 0 1px 2px rgba(20, 35, 31, .03), 0 12px 28px rgba(20, 35, 31, .07) !important;
     flex-wrap: nowrap !important;
 }
 
@@ -474,72 +561,92 @@ footer {
     padding: 0 !important;
 }
 
-.fa-plus-btn button,
-.fa-send-btn button,
-.fa-scan-btn button,
-.fa-clear-btn button {
+/* 图标按钮：隐藏文字符号，用内联 SVG 背景绘制，跨系统字体不会重叠 */
+.fa-icon-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
-    font-weight: 700 !important;
-    transition: transform .15s ease, filter .15s ease;
-}
-
-.fa-plus-btn button:hover,
-.fa-send-btn button:hover,
-.fa-scan-btn button:hover,
-.fa-clear-btn button:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.04);
-}
-
-.fa-plus-btn button {
-    width: 46px !important;
-    height: 46px !important;
-    min-width: 46px !important;
-    border-radius: 50% !important;
-    background: #00b06b !important;
-    color: #ffffff !important;
-    font-size: 28px !important;
+    font-size: 0 !important;
     line-height: 1 !important;
+    transition: transform .16s ease, box-shadow .16s ease, filter .16s ease !important;
 }
 
-.fa-send-btn button {
-    width: 38px !important;
-    height: 38px !important;
-    min-width: 38px !important;
-    border-radius: 50% !important;
-    background: #00b06b !important;
-    color: #ffffff !important;
-    font-size: 18px !important;
+.fa-icon-btn:hover {
+    transform: translateY(-1px) !important;
+    filter: brightness(1.03);
 }
 
-.fa-scan-btn button,
-.fa-clear-btn button {
-    width: 38px !important;
-    min-width: 34px !important;
-    height: 38px !important;
-    border-radius: 50% !important;
+.fa-icon-btn:active {
+    transform: translateY(0) scale(.96) !important;
+}
+
+.fa-icon-btn::before {
+    content: "";
+    display: block;
+    width: 20px;
+    height: 20px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+}
+
+.fa-plus-btn {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 42px !important;
+    border-radius: 14px !important;
+    background: #e7f4f1 !important;
+}
+
+.fa-plus-btn::before {
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%230f766e'%20stroke-width='2.2'%20stroke-linecap='round'%3E%3Cpath%20d='M12%205v14M5%2012h14'/%3E%3C/svg%3E");
+}
+
+.fa-send-btn {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 42px !important;
+    border-radius: 14px !important;
+    background: linear-gradient(135deg, #0f766e, #0b5c56) !important;
+    box-shadow: 0 4px 12px rgba(15, 118, 110, .22) !important;
+}
+
+.fa-send-btn::before {
+    width: 21px;
+    height: 21px;
+    /* 纸飞机：本体尖头朝右，向左（逆时针）转 90° 后尖头朝上 */
+    transform: rotate(-90deg);
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='white'%20stroke-width='1.9'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M21%2012L3%204l7%208-7%208%2018-8z'/%3E%3Cpath%20d='M10%2012h11'/%3E%3C/svg%3E");
+}
+
+.fa-voice-btn {
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    border-radius: 12px !important;
     background: #f1f7f5 !important;
-    color: #0f766e !important;
-    font-size: 19px !important;
 }
 
-.fa-clear-btn button {
-    width: 30px !important;
-    min-width: 30px !important;
-    height: 30px !important;
-    font-size: 16px !important;
-    opacity: .75;
+.fa-voice-btn::before {
+    width: 19px;
+    height: 19px;
+    /* 麦克风图标：语音输入占位 */
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%230f766e'%20stroke-width='1.9'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Crect%20x='9'%20y='3'%20width='6'%20height='11'%20rx='3'/%3E%3Cpath%20d='M5%2011a7%207%200%200%200%2014%200M12%2018v3M9%2021h6'/%3E%3C/svg%3E");
 }
 
-.fa-voice {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 40px;
-    color: #00b06b;
-    flex: none;
+/* 输入框与按钮垂直居中；label 不能 display:none，否则 textarea 会一起消失 */
+.fa-composer-input {
+    display: flex !important;
+    align-items: center !important;
+    align-self: center !important;
+}
+
+.fa-composer-input .input-container {
+    flex: 1 1 auto !important;
+    width: 100% !important;
 }
 
 .fa-composer-input textarea,
@@ -548,61 +655,198 @@ footer {
     box-shadow: none !important;
     outline: none !important;
     background: transparent !important;
-    font-size: 14.5px !important;
-    padding: 0 !important;
-    min-height: 24px !important;
+    font-size: 14px !important;
+    padding: 0 6px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    line-height: 1.5 !important;
 }
 
 .fa-composer-input label,
 .fa-composer .fa-composer-input > label {
+    display: block !important;
+    font-size: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+/* ------------------------------ 附件面板（DeepSeek 风格弹出菜单） ------------------------------ */
+.fa-attach-panel {
+    position: absolute !important;
+    bottom: calc(100% + 8px) !important;
+    left: 0 !important;
+    width: 268px !important;
+    max-width: calc(100vw - 80px) !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    border: 1px solid rgba(15, 118, 110, .12) !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(20, 35, 31, .06), 0 18px 42px rgba(20, 35, 31, .14) !important;
+    z-index: 30 !important;
+}
+
+/* Gradio 的 Group 会再包一层同 class 的容器：只让最外层做浮层，内层回归普通流 */
+.fa-attach-panel .fa-attach-panel {
+    position: static !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+.fa-attach-title {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: .02em;
+    color: var(--fa-muted) !important;
+    padding: 6px 10px 8px !important;
+}
+
+.fa-attach-list {
+    gap: 2px !important;
+}
+
+/* 每一行：圆形图标 + 文案 + 右侧说明，hover 只变底色，不加边框 */
+.fa-attach-item {
+    position: relative !important;
+    border: none !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    min-height: 46px !important;
+    padding: 5px 8px !important;
+    margin: 0 !important;
+    transition: background .15s ease !important;
+}
+
+.fa-attach-item:hover {
+    background: #f1f7f5 !important;
+}
+
+/* Gradio 的 File 把图标 + 文案放在 label 里；默认上传提示单独藏在 upload-text 里 */
+.fa-attach-item label[data-testid="block-label"] {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 10px !important;
+    width: 100% !important;
+    height: 36px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: var(--fa-ink) !important;
+}
+
+.fa-attach-item label[data-testid="block-label"] > span {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 10px !important;
+    background: #e7f4f1 !important;
+    flex: none !important;
+}
+
+.fa-attach-item label[data-testid="block-label"] svg {
+    width: 17px !important;
+    height: 17px !important;
+    color: var(--fa-primary) !important;
+}
+
+.fa-item-album label[data-testid="block-label"] > span {
+    background: #e8f0fb !important;
+}
+
+.fa-item-album label[data-testid="block-label"] svg {
+    color: #3b6fc4 !important;
+}
+
+.fa-attach-item [data-testid="upload-text"] {
     display: none !important;
 }
 
-/* 加号展开的导入菜单 */
-.fa-plus-menu {
-    margin-top: 10px !important;
-    padding: 14px 16px !important;
-    border: 1px solid var(--fa-border) !important;
-    border-radius: 18px !important;
-    background: #ffffff !important;
-    box-shadow: var(--fa-shadow) !important;
+/* 让整行都是点击热区 */
+.fa-attach-item .upload-container {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
 }
 
-.fa-menu-hint {
-    font-size: 12px;
-    color: var(--fa-muted);
-    margin-bottom: 10px;
-}
-
-.fa-plus-menu-row {
-    gap: 12px !important;
-    align-items: stretch !important;
-}
-
-.fa-plus-menu .fa-menu-tile {
-    border: 1px solid #e3ece9 !important;
-    border-radius: 16px !important;
-    background: #fbfdfc !important;
-    min-height: 110px !important;
-    padding: 14px 8px !important;
-    text-align: center !important;
-    box-shadow: none !important;
-}
-
-.fa-plus-menu .fa-menu-tile label,
-.fa-plus-menu .fa-menu-tile .label {
+button.fa-attach-item {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding-left: 8px !important;
     font-size: 13px !important;
-    font-weight: 600 !important;
-    color: var(--fa-ink) !important;
-}
-
-.fa-plus-menu .fa-menu-tile button {
-    font-size: 13px !important;
-    font-weight: 600 !important;
-    color: var(--fa-ink) !important;
-}
-
-.fa-plus-menu .fa-menu-tile.is-disabled {
-    opacity: .45;
+    font-weight: 500 !important;
+    color: var(--fa-muted) !important;
     cursor: not-allowed !important;
+    opacity: 1 !important;
+}
+
+button.fa-attach-item::before {
+    content: "";
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    flex: none;
+    border-radius: 10px;
+    background-color: #f1f3f5;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 17px 17px;
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%236c807c'%20stroke-width='1.8'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M6%203h8l4%204v14H6z'/%3E%3Cpath%20d='M14%203v4h4M9%2012h6M9%2016h6'/%3E%3C/svg%3E");
+}
+
+button.fa-attach-item::after {
+    content: "占位";
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--fa-muted);
+    background: #f1f3f5;
+    border-radius: 999px;
+    padding: 2px 7px;
+}
+
+.fa-attach-foot {
+    align-items: center !important;
+    min-height: 38px !important;
+    margin-top: 6px !important;
+    padding-top: 4px !important;
+    border-top: 1px solid #eef3f2 !important;
+}
+
+.fa-attach-note {
+    font-size: 10.5px !important;
+    color: var(--fa-muted) !important;
+}
+
+.fa-text-btn,
+.fa-attach-foot .fa-text-btn {
+    height: 30px !important;
+    min-height: 30px !important;
+    width: auto !important;
+    min-width: 88px !important;
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    align-self: center !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--fa-primary) !important;
+    font-size: 11px !important;
+    padding: 2px 6px !important;
 }
