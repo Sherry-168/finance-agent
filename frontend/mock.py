@@ -213,6 +213,11 @@ def health() -> str:
     return "Mock 模式（未连接后端）"
 
 
+def voice_transcribe(file_path: str = "") -> dict:
+    """模拟 POST /voice：返回固定转写文本（后端 ASR 未就绪时的 UI 自测）。"""
+    return {"text": "昨天打车 32 块"}
+
+
 def ocr_receipt() -> dict:
     """模拟 POST /records/ocr：多笔小票草稿，供勾选入库 UI 自测。"""
     today = dt.date.today().isoformat()

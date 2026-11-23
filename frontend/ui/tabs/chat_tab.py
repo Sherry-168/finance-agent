@@ -335,10 +335,40 @@ def reset_all():
     )
 
 
-def voice_placeholder(history: list):
-    """语音输入占位：提示即将上线，不改变现有对话内容。"""
-    tip = c.tip("语音输入即将上线，目前请先用文字输入或点「＋」上传小票。")
-    return (history or []) + [{"role": "assistant", "content": tip}]
+def transcribe_voice(audio_path, history: list):
+    """录音结束 → POST /voice → 转写文本回填输入框（不直接入库）。
+
+    设计决策（week2 文档 A1，最高性价比）：转写结果必须让用户过目一遍再发送，
+    可纠正 ASR 错字、可撤回；麦克风不可用时自然降级为键盘输入。
+    """
+    if not audio_path:
+        return gr.update(), gr.update(), gr.update()
+
+    try:
+        result = api.voice_transcribe(audio_path)
+        notice = ""
+    except api.ApiError as exc:
+        if api.should_fallback(exc):
+            result = mock.voice_transcribe(audio_path)
+            notice = mock.NOTICE
+        else:
+            text = f"语音识别失败：{exc.message}。请直接打字输入。"
+            return (history or []) + [{"role": "assistant", "content": c.tip(text, kind="error")}], gr.update(), gr.update(value=None)
+
+    text = (result.get("text") or "").strip()
+    if not text:
+        tip = c.tip("没有识别到内容，请离麦克风近一点重试，或直接打字。", kind="warn")
+        return (history or []) + [{"role": "assistant", "content": tip}], gr.update(), gr.update(value=None)
+
+    bubble = f"🎙 已转写：**{text}**\n\n请核对文字（可直接修改输入框），确认无误后点发送。"
+    if notice:
+        bubble += f"\n\n_{notice}_"
+    return (history or []) + [{"role": "assistant", "content": bubble}], gr.update(value=text), gr.update(value=None)
+
+
+def open_attach_menu():
+    """🎤 按钮展开附件面板（含录音组件）。"""
+    return gr.update(visible=True), True
 
 
 def toggle_ocr_menu(visible: bool):
@@ -407,6 +437,13 @@ def build_chat_tab() -> dict:
                 with gr.Group(visible=False, elem_classes=["fa-attach-panel"]) as ocr_menu:
                     gr.HTML('<div class="fa-attach-title">添加内容</div>')
                     with gr.Column(elem_classes=["fa-attach-list"]):
+                        voice_audio = gr.Audio(
+                            sources=["microphone"],
+                            type="filepath",  # numpy 拿不到可上传的文件对象（week2 P1-1）
+                            label="🎤 按住说话（建议 ≤60 秒，说完自动转写）",
+                            interactive=True,
+                            elem_classes=["fa-attach-item fa-item-voice"],
+                        )
                         photo_file = gr.File(
                             label="拍照识别",
                             file_types=["image"],
@@ -461,7 +498,8 @@ def build_chat_tab() -> dict:
     gr.HTML(
         c.tip(
             "交互约定：问句（含「多少 / 占比 / 趋势」等）走查账接口，只展示后端算好的回答与表格；"
-            "记账语句生成草稿，确认后才入库；点「＋」可使用拍照 / 相册小票识别，Excel 导入为占位入口。"
+            "记账语句生成草稿，确认后才入库；点「🎤」或「＋」可录音转写（回填文本框确认后发送）"
+            "与拍照 / 相册小票识别，Excel 导入为占位入口。麦克风不可用时请直接打字。"
         )
     )
 
@@ -495,9 +533,15 @@ def build_chat_tab() -> dict:
     photo_file.change(recognize_receipt, inputs=[photo_file, chatbot], outputs=ocr_event_outputs)
     album_file.change(recognize_receipt, inputs=[album_file, chatbot], outputs=ocr_event_outputs)
     voice_btn.click(
-        voice_placeholder,
-        inputs=[chatbot],
-        outputs=[chatbot],
+        open_attach_menu,
+        inputs=None,
+        outputs=[ocr_menu, ocr_menu_state],
+    )
+    # 录音结束自动转写：回填文本框 + 清空录音组件，等待用户确认发送
+    voice_audio.change(
+        transcribe_voice,
+        inputs=[voice_audio, chatbot],
+        outputs=[chatbot, text_input, voice_audio],
     )
     ocr_confirm_btn.click(
         confirm_ocr,
@@ -525,6 +569,7 @@ def build_chat_tab() -> dict:
         "album_file": album_file,
         "ocr_menu": ocr_menu,
         "voice_btn": voice_btn,
+        "voice_audio": voice_audio,
         "ocr_choices": ocr_choices,
         "ocr_confirm_btn": ocr_confirm_btn,
         "ocr_discard_btn": ocr_discard_btn,
