@@ -17,13 +17,9 @@ import gradio as gr
 import api
 import mock
 from config import CATEGORIES, MOCK_FALLBACK
-from ui import components as c
-
-GREETING = (
-    "你好，我是记账助手。说一句话就能记账，比如「昨天打车 32 块」；"
-    "也能直接问我「上个月吃饭花了多少」。\n\n"
-    "信息不全时我会反问你，补齐后在右侧确认卡核对入库。"
-)
+from ui import cards as c
+from ui import chat as chatui
+from ui.chat import GREETING
 
 # 契约允许纯日期或带时分（小票 OCR 草稿会带时间），见 docs/api.md §2.2
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}(?::\d{2})?)?$")
@@ -225,7 +221,7 @@ def respond(message: str, history: list, session_id: str, draft: dict | None):
             history = _append(history, "assistant", f"查账失败：{notice}")
         else:
             content = result.get("answer_text") or "（后端未返回回答文案）"
-            table_md = c.query_table_markdown(result.get("table") or [])
+            table_md = chatui.query_table_markdown(result.get("table") or [])
             if table_md:
                 content = f"{content}\n\n{table_md}"
             if notice:
@@ -254,7 +250,7 @@ def respond(message: str, history: list, session_id: str, draft: dict | None):
             history = _append(history, "assistant", f"_{notice}_")
         return (history, "", session_id, draft, c.draft_card_placeholder(), gr.update(visible=False), *_empty_form())
 
-    content = c.draft_summary(draft)
+    content = chatui.draft_summary(draft)
     if notice:
         content = f"{content}\n\n_{notice}_"
     history = _append(history, "assistant", content)
@@ -396,6 +392,7 @@ def build_chat_tab() -> dict:
                 label="记账对话",
                 value=[{"role": "assistant", "content": GREETING}],
                 height=380,
+                autoscroll=True,  # 新消息自动滚动到底部（week2 P0-2 / P1-3）
                 elem_classes=["fa-chat"],
             )
 
@@ -521,7 +518,7 @@ def build_chat_tab() -> dict:
     send_btn.click(respond, inputs=respond_inputs, outputs=respond_outputs)
     text_input.submit(respond, inputs=respond_inputs, outputs=respond_outputs)
 
-    confirm_btn.click(
+    confirm_event = confirm_btn.click(
         confirm_record,
         inputs=[draft_state, amount_in, category_in, merchant_in, occurred_in, note_in, chatbot, session_state],
         outputs=[chatbot, draft_state, draft_area, draft_form],
@@ -543,7 +540,7 @@ def build_chat_tab() -> dict:
         inputs=[voice_audio, chatbot],
         outputs=[chatbot, text_input, voice_audio],
     )
-    ocr_confirm_btn.click(
+    ocr_confirm_event = ocr_confirm_btn.click(
         confirm_ocr,
         inputs=[ocr_choices, ocr_drafts_state, ocr_raw_state, chatbot],
         outputs=ocr_event_outputs,
@@ -577,6 +574,8 @@ def build_chat_tab() -> dict:
         "draft_area": draft_area,
         "draft_form": draft_form,
         "confirm_btn": confirm_btn,
+        "confirm_event": confirm_event,
+        "ocr_confirm_event": ocr_confirm_event,
         "discard_btn": discard_btn,
         "session_state": session_state,
         "draft_state": draft_state,

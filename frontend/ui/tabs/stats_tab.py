@@ -1,7 +1,7 @@
 """Tab3 统计图表：月度指标卡 + 类别饼图 + 每日趋势折线。
 
 第二周口径（week2-plan P0-5）：图表库统一 **Plotly + gr.Plot**（开工对齐第①项），
-替换第一周的 ECharts iframe（组件仍保留在 components 里作降级参考）。
+替换第一周的 ECharts iframe（ECharts 方案仍保留在 ui/charts.py 尾部作降级参考）。
 
 契约（docs/api.md §5，仅统计 confirmed=1）：
 - GET /stats/summary?month=      → 指标卡（总额 / 笔数 / 日均，后端计算）
@@ -18,7 +18,8 @@ import gradio as gr
 import api
 import mock
 from config import MOCK_FALLBACK
-from ui import components as c
+from ui import cards as c
+from ui import charts
 
 _MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
@@ -54,7 +55,7 @@ def load_stats(month: str, days):
     """刷新三块统计内容；返回 (metrics_html, pie_fig, trend_fig)。"""
     month = (month or "").strip()
     days = int(days) if days else 30
-    invalid = c.empty_figure("月份格式应为 YYYY-MM（例如 2026-11），修正后刷新")
+    invalid = charts.empty_figure("月份格式应为 YYYY-MM（例如 2026-11），修正后刷新")
     if not _MONTH_RE.match(month):
         return (
             c.tip("月份格式应为 YYYY-MM，例如 2026-11。", kind="error"),
@@ -68,7 +69,7 @@ def load_stats(month: str, days):
     notice = notice_1 or ""
 
     if summary is None:
-        err = c.empty_figure("统计获取失败，请检查后端后点击「刷新统计」")
+        err = charts.empty_figure("统计获取失败，请检查后端后点击「刷新统计」")
         return c.tip(f"统计获取失败：{notice_1}", kind="error"), err, err
 
     metrics = c.metric_cards(
@@ -82,10 +83,10 @@ def load_stats(month: str, days):
         metrics += c.tip(notice, kind="warn")
 
     cat_items = (by_cat or {}).get("items") or []
-    pie = c.pie_figure(cat_items) if cat_items else c.empty_figure("本月暂无分类数据，先去记几笔")
+    pie = charts.pie_figure(cat_items) if cat_items else charts.empty_figure("本月暂无分类数据，先去记几笔")
 
     trend_items = (trend or {}).get("items") or []
-    trend_fig = c.trend_figure(trend_items) if trend_items else c.empty_figure("暂无趋势数据")
+    trend_fig = charts.trend_figure(trend_items) if trend_items else charts.empty_figure("暂无趋势数据")
 
     return metrics, pie, trend_fig
 
@@ -110,10 +111,10 @@ def build_stats_tab() -> dict:
     with gr.Row(equal_height=True):
         with gr.Column(scale=1):
             gr.HTML(c.section_head("类别占比", "GET /stats/by-category · Plotly"))
-            pie_chart = gr.Plot(value=c.empty_figure("点击「刷新统计」或切到本页自动加载"))
+            pie_chart = gr.Plot(value=charts.empty_figure("点击「刷新统计」或切到本页自动加载"))
         with gr.Column(scale=1):
             gr.HTML(c.section_head("每日趋势", "GET /stats/trend?days= · Plotly"))
-            trend_chart = gr.Plot(value=c.empty_figure("点击「刷新统计」或切到本页自动加载"))
+            trend_chart = gr.Plot(value=charts.empty_figure("点击「刷新统计」或切到本页自动加载"))
 
     gr.HTML(
         c.tip(

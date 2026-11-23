@@ -15,7 +15,7 @@ import gradio as gr
 import api
 import mock
 from config import CATEGORIES, TOTAL_BUDGET_LABEL
-from ui import components as c
+from ui import cards as c
 
 _MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
@@ -132,7 +132,7 @@ def build_budget_tab() -> dict:
 
         with gr.Column(scale=3):
             gr.HTML(c.section_head("预算进度与提醒", "已用 ≥80% 预警、≥100% 超支"))
-            progress_area = gr.HTML(c.budget_placeholder())
+            progress_area = gr.HTML(c.empty_state("尚未加载预警", "切到本页或点「加载预警」自动刷新。"))
             budget_list_area = gr.HTML(c.budget_list([]))
 
     status_area = gr.HTML(

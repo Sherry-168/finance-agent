@@ -19,7 +19,7 @@ from config import (
     DEFAULT_PAGE_SIZE,
     PAGE_SIZE_CHOICES,
 )
-from ui import components as c
+from ui import cards as c
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SOURCE_LABELS = {"text": "对话", "ocr": "小票", "manual": "手动"}
