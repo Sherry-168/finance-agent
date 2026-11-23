@@ -7,6 +7,8 @@ Gradio 原生组件对卡片、进度条、图表容器支持有限，
 import html
 import json
 
+import plotly.graph_objects as go
+
 from config import APP_SUBTITLE, APP_TITLE
 
 # ------------------------------------------------------------------ 顶部标题
@@ -222,6 +224,93 @@ def budget_list(items: list, notice: str = "") -> str:
         + body
         + extra
     )
+
+
+# ------------------------------------------------------------------ Plotly 图表工厂
+# 第二周统一口径（week2-plan P0-5）：Plotly + gr.Plot，替换第一周的 ECharts iframe。
+# 主题三要素：透明背景 / 统一色板 / 中文显式字体（否则容器里变方块）。
+
+PLOTLY_FONT = "Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif"
+CHART_PALETTE = ["#2F6BFF", "#2A9D8F", "#F59E0B", "#E76F51", "#8B5CF6", "#0EA5E9", "#84CC16", "#EC4899"]
+_TEXT, _TEXT_2 = "#1F2329", "#8A9099"
+
+
+def _chart_layout(fig: "go.Figure", legend: bool = False) -> "go.Figure":
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"family": PLOTLY_FONT, "size": 12, "color": _TEXT},
+        margin={"l": 10, "r": 10, "t": 14, "b": 10},
+        showlegend=legend,
+    )
+    return fig
+
+
+def empty_figure(text: str) -> "go.Figure":
+    """空数据占位：只显示文案，不渲染空白坐标轴（P0-5 要求）。"""
+    fig = go.Figure()
+    fig.add_annotation(
+        text=text, showarrow=False, font={"size": 14, "color": _TEXT_2}
+    )
+    fig.update_layout(xaxis={"visible": False}, yaxis={"visible": False})
+    return _chart_layout(fig)
+
+
+def pie_figure(items: list) -> "go.Figure":
+    """类别占比环图；占比 <3% 的类别合并为「其他」（B6），标签「类别 12.3%」。"""
+    threshold = 0.03
+    labels, values, other_total = [], [], 0.0
+    for item in sorted(items, key=lambda x: float(x.get("total") or 0), reverse=True):
+        total = float(item.get("total") or 0)
+        ratio = float(item.get("ratio") or 0)
+        if ratio and ratio < threshold:
+            other_total += total
+        else:
+            labels.append(item.get("category") or "其他")
+            values.append(round(total, 2))
+    if other_total > 0:
+        labels.append("其他")
+        values.append(round(other_total, 2))
+
+    fig = go.Figure(
+        go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.42,
+            sort=False,
+            marker={"colors": CHART_PALETTE, "line": {"color": "#fff", "width": 2}},
+            texttemplate="%{label} %{percent:.1%}",
+            textposition="outside",
+            hovertemplate="%{label}：¥%{value:,.2f}（%{percent:.1%}）<extra></extra>",
+        )
+    )
+    return _chart_layout(fig)
+
+
+def trend_figure(items: list) -> "go.Figure":
+    """每日趋势折线；hover 显示「日期 · ¥金额 · N 笔」，Y 轴金额（P0-5）。"""
+    dates = [item.get("date", "") for item in items]
+    totals = [round(float(item.get("total") or 0), 2) for item in items]
+    counts = [int(item.get("count") or 0) for item in items]
+
+    fig = go.Figure(
+        go.Scatter(
+            x=dates,
+            y=totals,
+            customdata=counts,
+            mode="lines+markers" if len(dates) <= 31 else "lines",
+            line={"color": CHART_PALETTE[0], "width": 2.4, "shape": "spline"},
+            marker={"size": 6},
+            fill="tozeroy",
+            fillcolor="rgba(47,107,255,0.10)",
+            hovertemplate="%{x} · ¥%{y:,.2f} · %{customdata} 笔<extra></extra>",
+        )
+    )
+    fig.update_xaxes(showgrid=False, tickformat="%m-%d", tickfont={"size": 10, "color": _TEXT_2})
+    fig.update_yaxes(
+        tickprefix="¥", gridcolor="#EEF1F5", tickfont={"size": 10, "color": _TEXT_2}
+    )
+    return _chart_layout(fig)
 
 
 def chart_placeholder(chart_id: str, title: str, desc: str) -> str:
