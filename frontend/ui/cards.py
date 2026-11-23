@@ -109,13 +109,18 @@ def metric_cards(items: list[tuple[str, str, str]]) -> str:
 # ------------------------------------------------------------------ 草稿确认卡
 
 
-def _field_row(label: str, value_html: str) -> str:
+def _field_row(label: str, value_html: str, unconf: bool = False) -> str:
+    """字段行；unconf=True 时加虚线黄描边（P0-3 低置信度提示）。"""
     return (
-        '<div class="fa-field-row">'
+        f'<div class="fa-field-row{" is-unconf" if unconf else ""}">'
         f'<span class="fa-field-label">{label}</span>'
         f'<span class="fa-field-value">{value_html}</span>'
         "</div>"
     )
+
+
+def _conf_badge(show: bool) -> str:
+    return ' <span class="fa-unconf">请确认</span>' if show else ""
 
 
 def draft_card_placeholder() -> str:
@@ -155,19 +160,39 @@ def draft_card(draft: dict) -> str:
     def missing_mark(key: str) -> str:
         return ' <span class="fa-missing">待补充</span>' if key in missing else ""
 
+    # P0-3：置信度 < 0.8 时，金额/类别两个字段加黄色描边 + 「请确认」角标
+    confidence = draft.get("confidence")
+    low_conf = isinstance(confidence, (int, float)) and confidence < 0.8
+
     amount = fields.get("amount")
-    amount_html = f'<span class="fa-amount">{format_yuan(amount)}</span>' if amount is not None else "待补充"
+    amount_html = (
+        f'<span class="fa-amount">{format_yuan(amount)}</span>'
+        if amount is not None
+        else "待补充"
+    )
     rows = "".join(
         [
-            _field_row("金额", amount_html + missing_mark("amount")),
-            _field_row("类别", f"{fields.get('category') or '待补充'}" + missing_mark("category")),
+            _field_row(
+                "金额",
+                amount_html + missing_mark("amount") + _conf_badge(low_conf),
+                unconf=low_conf,
+            ),
+            _field_row(
+                "类别",
+                f"{fields.get('category') or '待补充'}"
+                + missing_mark("category")
+                + _conf_badge(low_conf),
+                unconf=low_conf,
+            ),
             _field_row("商户", fields.get("merchant") or "—"),
-            _field_row("消费时间", f"{fields.get('occurred_at') or '待补充'}" + missing_mark("occurred_at")),
+            _field_row(
+                "消费时间",
+                f"{fields.get('occurred_at') or '待补充'}" + missing_mark("occurred_at"),
+            ),
             _field_row("备注", fields.get("note") or "—"),
         ]
     )
 
-    confidence = draft.get("confidence")
     conf_html = format_ratio(confidence) if isinstance(confidence, (int, float)) else "--"
     rows += _field_row("置信度", conf_html)
 
@@ -255,10 +280,18 @@ def budget_progress(items: list, notice: str = "") -> str:
         meta = f"{format_yuan(used)} / {format_yuan(amount)}"
         pct = round(float(ratio) * 100, 1) if isinstance(ratio, (int, float)) else 0
         width = min(max(pct, 2.0), 100.0)
+        numeric = isinstance(used, (int, float)) and isinstance(amount, (int, float))
         if status == "over":
-            over = (float(used) - float(amount)) if isinstance(used, (int, float)) and isinstance(amount, (int, float)) else None
-            alert = f"已超支 {format_yuan(over)}，尽快控制消费" if over and over > 0 else "已超出预算，尽快控制消费"
+            over = (float(used) - float(amount)) if numeric else None
+            if over and over > 0:
+                # P0-6：超 100% 的条目右侧显示超出金额（红）
+                meta += f" · <b style='color:var(--fa-over)'>超 {format_yuan(over)}</b>"
+            alert = "已超出预算，尽快控制消费"
         elif status == "warning":
+            remaining = (float(amount) - float(used)) if numeric else None
+            # P0-6：超 80% 的条目右侧显示剩余额度
+            if remaining is not None:
+                meta += f" · 剩 {format_yuan(remaining)}"
             alert = f"已用 {format_ratio(ratio)}，接近预算上限"
         else:
             alert = f"已用 {format_ratio(ratio)}，额度充足"

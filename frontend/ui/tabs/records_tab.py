@@ -238,6 +238,28 @@ def build_records_tab() -> dict:
         c.empty_state("暂无数据", "点击「查询」加载明细；后端未启动时展示本地演示数据。")
     )
 
+    # P0-4 空态跳转：gr.HTML 内按钮无法绑事件，用真实 Button + js 直点页签
+    jump_chat_btn = gr.Button(
+        "💬 去对话页记一笔",
+        variant="secondary",
+        size="sm",
+        elem_classes=["fa-jump-btn"],
+    )
+    jump_chat_btn.click(
+        fn=None,
+        inputs=None,
+        outputs=None,
+        js=(
+            "() => {"
+            "  const el = document.getElementById('tab-chat');"
+            "  if (el) { el.click(); return; }"
+            "  const btn = [...document.querySelectorAll('button')]"
+            "    .find(b => b.textContent.includes('记账对话'));"
+            "  if (btn) btn.click();"
+            "}"
+        ),
+    )
+
     with gr.Accordion("修改 / 删除记录（点击表格行自动载入）", open=False):
         gr.HTML(
             c.tip(

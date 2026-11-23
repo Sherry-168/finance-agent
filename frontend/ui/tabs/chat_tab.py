@@ -21,6 +21,15 @@ from ui import cards as c
 from ui import chat as chatui
 from ui.chat import GREETING
 
+
+def _category_choices() -> list[str]:
+    """GET /categories 优先；未连通时用本地 8 类兜底。"""
+    try:
+        cats = api.list_categories()
+        return cats if cats else list(CATEGORIES)
+    except api.ApiError:
+        return list(CATEGORIES)
+
 # 契约允许纯日期或带时分（小票 OCR 草稿会带时间），见 docs/api.md §2.2
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}(?::\d{2})?)?$")
 # 命中这些词视为查账问句，交给后端 /query；其余输入仍走记账解析
@@ -474,7 +483,11 @@ def build_chat_tab() -> dict:
             draft_area = gr.HTML(c.draft_card_placeholder())
             with gr.Group(visible=False) as draft_form:
                 amount_in = gr.Number(label="金额 (¥)", precision=2, minimum=0)
-                category_in = gr.Dropdown(choices=CATEGORIES, label="类别", interactive=True)
+                category_in = gr.Dropdown(
+                    choices=_category_choices(),  # GET /categories 优先（P0-2），未连通时本地枚举兜底
+                    label="类别",
+                    interactive=True,
+                )
                 merchant_in = gr.Textbox(label="商户（可空）")
                 occurred_in = gr.Textbox(label="消费时间（YYYY-MM-DD）", placeholder="2026-11-16")
                 note_in = gr.Textbox(label="备注（可空）")

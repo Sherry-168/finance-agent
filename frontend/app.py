@@ -66,6 +66,23 @@ def dismiss_banner(items: list, dismissed: set):
     return alerts.banner_html(items, dismissed, ""), dismissed
 
 
+def check_health():
+    """启动自检（P0-1）：后端未连接时顶部出灰色提示条 + 重试按钮，页面不白屏。
+
+    验收口径：手动停掉后端 → 页面仍可交互、出友好提示；重启后无需刷新即可恢复。
+    """
+    try:
+        api.health()
+        return gr.update(visible=False), ""
+    except api.ApiError:
+        tip = c.tip(
+            "后端未连接：页面仍可交互，演示类功能将使用本地演示数据。"
+            "点右侧「重试连接」重新检测，无需刷新页面。",
+            kind="warn",
+        )
+        return gr.update(visible=True), tip
+
+
 def create_app() -> gr.Blocks:
     """构建 Gradio Blocks 应用（五区骨架 + 顶部提醒横幅）。"""
     with gr.Blocks(title=APP_TITLE, analytics_enabled=False) as demo:
@@ -77,6 +94,11 @@ def create_app() -> gr.Blocks:
         with gr.Row(equal_height=True, visible=True):
             banner = gr.HTML("", elem_classes=["fa-banner-wrap"])
             dismiss_btn = gr.Button("✕", elem_classes=["fa-banner-close"], scale=0)
+
+        # 后端健康提示条（P0-1）：默认隐藏，/health 失败时出现
+        with gr.Row(equal_height=True, visible=False) as health_row:
+            health_html = gr.HTML("")
+            health_retry = gr.Button("重试连接", variant="secondary", scale=0, size="sm")
 
         with gr.Tabs():
             with gr.Tab("记账对话", id="tab-chat"):
@@ -113,6 +135,10 @@ def create_app() -> gr.Blocks:
         banner_inputs = [dismissed_state]
         banner_outputs = [banner, alerts_state]
         demo.load(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+
+        # P0-1：启动自检 + 手动重试（后端重启后无需刷新即可恢复）
+        demo.load(check_health, inputs=None, outputs=[health_row, health_html])
+        health_retry.click(check_health, inputs=None, outputs=[health_row, health_html])
         budget_tab_item.select(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
         chat_handles["confirm_event"].then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
         chat_handles["ocr_confirm_event"].then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)

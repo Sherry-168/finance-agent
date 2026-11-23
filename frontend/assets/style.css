@@ -17,6 +17,9 @@
     --fa-warning-soft: #fef3c7;
     --fa-over: #b91c1c;
     --fa-over-soft: #fee2e2;
+    /* P0-6 进度条指定色：warning #F59E0B / over #DC2626 */
+    --fa-warning-strong: #f59e0b;
+    --fa-over-strong: #dc2626;
     --fa-radius: 14px;
     --fa-shadow: 0 1px 2px rgba(20, 35, 31, .04), 0 8px 24px rgba(20, 35, 31, .05);
 }
@@ -337,11 +340,11 @@ footer {
 }
 
 .fa-bar-fill.is-warning {
-    background: var(--fa-warning);
+    background: var(--fa-warning-strong);
 }
 
 .fa-bar-fill.is-over {
-    background: var(--fa-over);
+    background: var(--fa-over-strong);
 }
 
 .fa-budget-alert {
@@ -892,3 +895,30 @@ button.fa-attach-item::after {
     padding: 0 !important;
     border-radius: 8px !important;
 }
+
+/* ---------------------------------------------------------------- 低置信度字段（P0-3） */
+.fa-field-row.is-unconf {
+    outline: 1px dashed var(--fa-warning-strong);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+.fa-unconf {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fa-warning);
+    background: var(--fa-warning-soft);
+    border: 1px solid var(--fa-warning-strong);
+    border-radius: 6px;
+    vertical-align: middle;
+}
+
+/* ---------------------------------------------------------------- 隐藏 Plotly 默认工具栏（P0-5） */
+.js-plotly-plot .modebar,
+.modebar-container {
+    display: none !important;
+}
+
