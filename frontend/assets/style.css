@@ -841,6 +841,13 @@ button.fa-attach-item::after {
     padding: 2px 7px;
 }
 
+/* 🎤 浮层：锚定在右侧麦克风按钮上方（right 留出最右侧发送按钮的宽度） */
+.fa-voice-panel {
+    left: auto !important;
+    right: 48px !important;
+    width: 286px !important;
+}
+
 .fa-attach-foot {
     align-items: center !important;
     min-height: 38px !important;

@@ -382,35 +382,37 @@ def transcribe_voice(audio_path, history: list):
     return (history or []) + [{"role": "assistant", "content": bubble}], gr.update(value=text), gr.update(value=None)
 
 
-def open_attach_menu():
-    """🎤 按钮：面板只显示录音组件，隐藏拍照 / 相册 / Excel 等附件项。"""
+def open_attach_menu(visible: bool, mode: str):
+    """🎤 按钮：只开麦克风浮层（锚定右侧），再点一次收起。"""
+    next_visible = not (bool(visible) and mode == "voice")
     return (
-        gr.update(visible=True),   # 面板
-        gr.update(visible=True),   # 录音区
-        gr.update(visible=False),  # 附件区
-        "voice",
-        True,
+        gr.update(visible=next_visible),  # 🎤 浮层
+        gr.update(visible=False),         # ＋ 浮层
+        "voice" if next_visible else "",
+        next_visible,
     )
 
 
 def toggle_ocr_menu(visible: bool, mode: str):
-    """＋ 按钮：面板只显示拍照 / 相册 / Excel / 清空，隐藏录音组件。
-
-    若当前是 🎤 面板，则直接切换成附件模式（不收起），避免要点两次。
-    """
+    """＋ 按钮：只开附件浮层（锚定左侧）；🎤 开着时直接切换，不收起。"""
     next_visible = not (bool(visible) and mode == "plus")
     return (
-        gr.update(visible=next_visible),  # 面板
-        gr.update(visible=False),         # 录音区
-        gr.update(visible=next_visible),  # 附件区
+        gr.update(visible=False),         # 🎤 浮层
+        gr.update(visible=next_visible),  # ＋ 浮层
         "plus" if next_visible else "",
         next_visible,
     )
 
 
 def reset_full():
-    """清空对话与草稿，同时收起加号菜单。"""
-    return (*reset_all(), gr.update(visible=False), "", False)
+    """清空对话与草稿，同时收起两个浮层。"""
+    return (
+        *reset_all(),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        "",
+        False,
+    )
 
 
 def build_chat_tab() -> dict:
@@ -465,12 +467,13 @@ def build_chat_tab() -> dict:
                         scale=0,
                     )
 
-                # 参考 DeepSeek 的「＋」弹出菜单：锚定在输入栏上方的小浮层，
-                # 用「圆形图标 + 文案 + 右侧说明」的列表行，而不是大块方形磁贴。
-                with gr.Group(visible=False, elem_classes=["fa-attach-panel"]) as ocr_menu:
+                # 两个独立浮层：🎤 面板锚定在麦克风按钮上方（靠右），
+                # ＋ 面板锚定在加号上方（靠左）。各自按钮只开自己那一块。
+                with gr.Group(
+                    visible=False, elem_classes=["fa-attach-panel fa-voice-panel"]
+                ) as voice_menu:
                     gr.HTML('<div class="fa-attach-title">添加内容</div>')
-                    # 🎤 模式：只显示录音组件
-                    with gr.Group(visible=True, elem_classes=["fa-attach-section"]) as voice_group:
+                    with gr.Group(elem_classes=["fa-attach-section"]):
                         with gr.Column(elem_classes=["fa-attach-list"]):
                             voice_audio = gr.Audio(
                                 sources=["microphone"],
@@ -479,36 +482,37 @@ def build_chat_tab() -> dict:
                                 interactive=True,
                                 elem_classes=["fa-attach-item fa-item-voice"],
                             )
-                    # ＋ 模式：只显示拍照 / 相册 / Excel / 清空
-                    with gr.Group(visible=True, elem_classes=["fa-attach-section"]) as attach_group:
-                        with gr.Column(elem_classes=["fa-attach-list"]):
-                            photo_file = gr.File(
-                                label="拍照识别",
-                                file_types=["image"],
-                                interactive=True,
-                                elem_classes=["fa-attach-item fa-item-photo"],
-                            )
-                            album_file = gr.File(
-                                label="相册识别",
-                                file_types=["image"],
-                                interactive=True,
-                                elem_classes=["fa-attach-item fa-item-album"],
-                            )
-                            gr.Button(
-                                "Excel 导入",
-                                interactive=False,
-                                elem_classes=["fa-attach-item fa-item-excel"],
-                            )
-                        with gr.Row(elem_classes=["fa-attach-foot"]):
-                            gr.HTML(
-                                '<span class="fa-attach-note">Excel 导入为占位入口，暂未开放</span>'
-                            )
-                            clear_btn = gr.Button(
-                                "清空对话与草稿",
-                                elem_classes=["fa-text-btn"],
-                                min_width=0,
-                                scale=0,
-                            )
+
+                with gr.Group(visible=False, elem_classes=["fa-attach-panel"]) as ocr_menu:
+                    gr.HTML('<div class="fa-attach-title">添加内容</div>')
+                    with gr.Column(elem_classes=["fa-attach-list"]):
+                        photo_file = gr.File(
+                            label="拍照识别",
+                            file_types=["image"],
+                            interactive=True,
+                            elem_classes=["fa-attach-item fa-item-photo"],
+                        )
+                        album_file = gr.File(
+                            label="相册识别",
+                            file_types=["image"],
+                            interactive=True,
+                            elem_classes=["fa-attach-item fa-item-album"],
+                        )
+                        gr.Button(
+                            "Excel 导入",
+                            interactive=False,
+                            elem_classes=["fa-attach-item fa-item-excel"],
+                        )
+                    with gr.Row(elem_classes=["fa-attach-foot"]):
+                        gr.HTML(
+                            '<span class="fa-attach-note">Excel 导入为占位入口，暂未开放</span>'
+                        )
+                        clear_btn = gr.Button(
+                            "清空对话与草稿",
+                            elem_classes=["fa-text-btn"],
+                            min_width=0,
+                            scale=0,
+                        )
 
         with gr.Column(scale=2):
             gr.HTML(c.section_head("草稿确认卡", "确认后才会入库"))
@@ -575,8 +579,9 @@ def build_chat_tab() -> dict:
     ocr_event_outputs = [chatbot, *ocr_outputs]
     photo_file.change(recognize_receipt, inputs=[photo_file, chatbot], outputs=ocr_event_outputs)
     album_file.change(recognize_receipt, inputs=[album_file, chatbot], outputs=ocr_event_outputs)
-    menu_outputs = [ocr_menu, voice_group, attach_group, ocr_menu_mode, ocr_menu_state]
-    voice_btn.click(open_attach_menu, inputs=None, outputs=menu_outputs)
+    menu_inputs = [ocr_menu_state, ocr_menu_mode]
+    menu_outputs = [voice_menu, ocr_menu, ocr_menu_mode, ocr_menu_state]
+    voice_btn.click(open_attach_menu, inputs=menu_inputs, outputs=menu_outputs)
     # 录音结束自动转写：回填文本框 + 清空录音组件，等待用户确认发送
     voice_audio.change(
         transcribe_voice,
@@ -596,14 +601,10 @@ def build_chat_tab() -> dict:
     )
     ocr_discard_btn.click(discard_ocr, outputs=[ocr_count, *ocr_outputs])
 
-    plus_btn.click(
-        toggle_ocr_menu,
-        inputs=[ocr_menu_state, ocr_menu_mode],
-        outputs=menu_outputs,
-    )
+    plus_btn.click(toggle_ocr_menu, inputs=menu_inputs, outputs=menu_outputs)
     clear_btn.click(
         reset_full,
-        outputs=[*respond_outputs, *ocr_outputs, ocr_menu, ocr_menu_mode, ocr_menu_state],
+        outputs=[*respond_outputs, *ocr_outputs, voice_menu, ocr_menu, ocr_menu_mode, ocr_menu_state],
     )
 
     return {
