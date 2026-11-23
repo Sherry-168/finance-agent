@@ -188,9 +188,19 @@ def confirm_ocr(selected, drafts: list, raw_text: str, history: list):
     )
 
 
+def update_ocr_count(selected, drafts: list):
+    """P2-1：长截图多笔场景的折叠计数「共 X 笔，已选 Y 笔」。"""
+    total = len(drafts or [])
+    picked = len(selected or [])
+    if not total:
+        return ""
+    return c.tip(f"共 {total} 笔，已选 {picked} 笔。勾选需要的条目后点「入库所选」。")
+
+
 def discard_ocr():
     """放弃整张小票草稿。"""
     return (
+        "",  # 清空折叠计数
         [], "", c.tip("已放弃小票草稿。"),
         gr.update(choices=[], value=[]), gr.update(visible=False),
     )
@@ -498,6 +508,7 @@ def build_chat_tab() -> dict:
 
             with gr.Group(visible=False) as ocr_panel:
                 gr.HTML(c.section_head("小票草稿", "勾选需要的条目后入库"))
+                ocr_count = gr.HTML("")  # P2-1：动态计数「共 X 笔，已选 Y 笔」
                 ocr_info = gr.HTML(c.empty_state("尚未识别小票", "上传图片后将自动识别。"))
                 ocr_choices = gr.CheckboxGroup(
                     label="选择要入库的条目", choices=[], value=[]
@@ -559,7 +570,13 @@ def build_chat_tab() -> dict:
         inputs=[ocr_choices, ocr_drafts_state, ocr_raw_state, chatbot],
         outputs=ocr_event_outputs,
     )
-    ocr_discard_btn.click(discard_ocr, outputs=ocr_outputs)
+    # P2-1：勾选变化 → 更新折叠计数
+    ocr_choices.change(
+        update_ocr_count,
+        inputs=[ocr_choices, ocr_drafts_state],
+        outputs=[ocr_count],
+    )
+    ocr_discard_btn.click(discard_ocr, outputs=[ocr_count, *ocr_outputs])
 
     plus_btn.click(
         toggle_ocr_menu,

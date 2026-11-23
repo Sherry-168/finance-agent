@@ -239,6 +239,30 @@ def ocr_receipt() -> dict:
                 },
                 "confidence": 0.86, "missing_fields": [], "clarify_question": None,
             },
+            {
+                "draft_id": "mock_ocr_3",
+                "fields": {
+                    "amount": 89.0, "category": "购物", "merchant": "永辉超市",
+                    "occurred_at": today, "note": None,
+                },
+                "confidence": 0.91, "missing_fields": [], "clarify_question": None,
+            },
+            {
+                "draft_id": "mock_ocr_4",
+                "fields": {
+                    "amount": 26.5, "category": "餐饮", "merchant": "老乡鸡",
+                    "occurred_at": today, "note": None,
+                },
+                "confidence": 0.79, "missing_fields": [], "clarify_question": None,
+            },
+            {
+                "draft_id": "mock_ocr_5",
+                "fields": {
+                    "amount": 199.0, "category": "娱乐", "merchant": "万达影城",
+                    "occurred_at": today, "note": None,
+                },
+                "confidence": 0.83, "missing_fields": [], "clarify_question": None,
+            },
         ],
         "ocr_engine": "mock",
         "raw_text": "瑞幸咖啡 45.50\n地铁 12.00",

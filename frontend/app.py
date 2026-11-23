@@ -33,6 +33,7 @@ import mock
 from config import APP_TITLE, SERVER_NAME, SERVER_PORT
 from ui import alerts
 from ui import cards as c
+from ui.tabs.demo_tab import load_demo_data as demo_load
 from ui.tabs import (
     build_budget_tab,
     build_chat_tab,
@@ -95,6 +96,46 @@ GOTO_BUDGET_JS = (
     "}"
 )
 
+GOTO_STATS_JS = (
+    "() => {"
+    "  const el = document.getElementById('tab-stats');"
+    "  if (el) { el.click(); return; }"
+    "  const btn = [...document.querySelectorAll('button')]"
+    "    .find(b => b.textContent.includes('统计图表'));"
+    "  if (btn) btn.click();"
+    "}"
+)
+
+# P2-2 / B7：演示态字号放大，兼顾投影可读性（按钮 ≥44px、正文 ≥14.5px）
+DEMO_STYLE_CSS = """
+.gradio-container { font-size: 15px !important; }
+.tab-nav button { font-size: 15px !important; }
+.fa-toolbar .btn, .fa-jump-btn { min-height: 44px !important; }
+.fa-metric-value { font-size: 27px !important; }
+.fa-dash-big { font-size: 30px !important; }
+.fa-amount { font-size: 30px !important; }
+.fa-banner { font-size: 15px !important; }
+.fa-chat .message { font-size: 14.5px !important; }
+.fa-draft { padding: 20px !important; }
+.fa-budget-item { padding: 15px 16px !important; margin-bottom: 12px; }
+"""
+
+
+def demo_style_on():
+    return f"<style>{DEMO_STYLE_CSS}</style>"
+
+
+def demo_style_off():
+    return ""
+
+
+def notify_demo_ready():
+    gr.Info("演示数据已就绪，已切到「统计图表」页")
+
+
+def notify_demo_reset():
+    gr.Info("演示数据已清空，页面回到空态")
+
 
 def dismiss_banner(items: list, dismissed: set):
     """关闭按钮：把当前活跃提醒全部标记已读（本会话内不再弹同一条）。"""
@@ -128,8 +169,15 @@ def create_app() -> gr.Blocks:
         # 顶部提醒横幅（P1-2）：分级红/橙，可关闭，事件驱动刷新 + Timer 兜底
         dismissed_state = gr.State(set())
         alerts_state = gr.State([])
+        # P2-2：演示态样式注入点（<style> 由事件动态开/关）
+        demo_style_area = gr.HTML("", elem_classes=["fa-demo-style"])
+
         with gr.Row(equal_height=True, visible=True):
             banner = gr.HTML("", elem_classes=["fa-banner-wrap"])
+            quick_demo_btn = gr.Button(
+                "🎬 一键演示", variant="primary", scale=0, size="sm",
+                elem_classes=["fa-jump-btn"],
+            )
             goto_budget_btn = gr.Button(
                 "查看预算", variant="secondary", scale=0, size="sm",
                 elem_classes=["fa-jump-btn"], visible=False,
@@ -197,6 +245,31 @@ def create_app() -> gr.Blocks:
         demo_handles["load_event"].then(refresh_dashboard, inputs=None, outputs=dash_outputs)
         demo_handles["reset_event"].then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
         demo_handles["reset_event"].then(refresh_dashboard, inputs=None, outputs=dash_outputs)
+
+        # ---- P2-2 / A7 一键演示编排：灌数据 → 提示 + 切统计页（切页自动刷新图表）→ 演示态字号 ----
+        style_outputs = [demo_style_area]
+
+        def wire_demo_ready(event):
+            event.then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+            event.then(refresh_dashboard, inputs=None, outputs=dash_outputs)
+            event.then(demo_style_on, inputs=None, outputs=style_outputs)
+            event.then(notify_demo_ready, inputs=None, outputs=None)
+            event.then(fn=None, inputs=None, outputs=None, js=GOTO_STATS_JS)
+
+        def wire_demo_reset(event):
+            event.then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+            event.then(refresh_dashboard, inputs=None, outputs=dash_outputs)
+            event.then(demo_style_off, inputs=None, outputs=style_outputs)
+            event.then(notify_demo_reset, inputs=None, outputs=None)
+
+        wire_demo_ready(demo_handles["load_event"])
+        wire_demo_reset(demo_handles["reset_event"])
+
+        # 顶部「一键演示」：与演示页按钮同一条编排链，不用翻到最后一个 Tab
+        quick_demo_event = quick_demo_btn.click(
+            demo_load, inputs=None, outputs=[demo_handles["result_area"]],
+        )
+        wire_demo_ready(quick_demo_event)
         timer = gr.Timer(60)
         timer.tick(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
         timer.tick(refresh_dashboard, inputs=None, outputs=dash_outputs)
