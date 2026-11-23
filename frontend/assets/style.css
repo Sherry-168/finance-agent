@@ -709,7 +709,8 @@ footer {
 }
 
 /* Gradio 的 Group 会再包一层同 class 的容器：只让最外层做浮层，内层回归普通流 */
-.fa-attach-panel .fa-attach-panel {
+.fa-attach-panel .fa-attach-panel,
+.fa-attach-panel .fa-attach-section {
     position: static !important;
     bottom: auto !important;
     left: auto !important;
