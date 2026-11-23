@@ -340,6 +340,54 @@ def budget_list(items: list, notice: str = "") -> str:
     )
 
 
+# ------------------------------------------------------------------ 仪表盘首屏（P1-3 / B5）
+
+
+def dashboard_card(summary: dict, total_budget: dict | None, notice: str = "") -> str:
+    """左侧仪表盘：本月支出 / 预算剩余两个大数字 + 迷你环形进度。
+
+    无论在哪个 Tab，预算压力始终可见（呼应「主动提醒」选题点）。
+    数字全部来自后端 /stats/summary 与 /budgets/alerts，前端不计算。
+    """
+    spent = format_yuan(summary.get("total"))
+    count = summary.get("count")
+    daily = format_yuan(summary.get("daily_avg"))
+    sub = f"{count} 笔 · 日均 {daily}" if isinstance(count, (int, float)) else f"日均 {daily}"
+
+    amount = (total_budget or {}).get("amount")
+    used = (total_budget or {}).get("used")
+    ratio = (total_budget or {}).get("used_ratio")
+    status = (total_budget or {}).get("status") or "normal"
+    if isinstance(amount, (int, float)) and isinstance(used, (int, float)):
+        remaining = float(amount) - float(used)
+        remaining_text = format_yuan(abs(remaining))
+        remaining_text = f"-{remaining_text}" if remaining < 0 else remaining_text
+        remaining_label = "预算超出" if remaining < 0 else "预算剩余"
+    else:
+        remaining_text = "--"
+        remaining_label = "预算剩余"
+        amount = None
+    pct = min(round(float(ratio) * 100), 100) if isinstance(ratio, (int, float)) else 0
+
+    notice_html = f'<div class="fa-dash-notice">{notice}</div>' if notice else ""
+    return f"""
+    <div class="fa-dash">
+      <div class="fa-dash-label">本月支出</div>
+      <div class="fa-dash-big">{spent}</div>
+      <div class="fa-dash-sub">{sub}</div>
+      <div class="fa-ring is-{status}" style="--pct:{pct}"><div class="fa-ring-pct">{pct}%</div></div>
+      <div class="fa-dash-row">
+        <span>{remaining_label}</span>
+        <b>{remaining_text}</b>
+      </div>
+      <div class="fa-dash-row is-muted">
+        <span>总预算</span><b>{format_yuan(amount)}</b>
+      </div>
+      {notice_html}
+    </div>
+    """
+
+
 # ------------------------------------------------------------------ 演示入口
 
 

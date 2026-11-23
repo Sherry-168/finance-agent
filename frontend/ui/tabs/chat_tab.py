@@ -47,7 +47,8 @@ def new_session_id() -> str:
 
 def _append(history: list, role: str, content: str) -> list:
     history = list(history or [])
-    history.append({"role": role, "content": content})
+    # P1-3：气泡统一带时间戳（chatui.stamp，<sub> 由 CSS 弱化显示）
+    history.append({"role": role, "content": chatui.stamp(content)})
     return history
 
 

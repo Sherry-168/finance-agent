@@ -55,15 +55,52 @@ def _fetch_alerts() -> tuple[list, str]:
 
 
 def refresh_banner(dismissed: set):
-    """拉取预警并渲染横幅；返回 (横幅 HTML, 当前预警列表)。"""
+    """拉取预警并渲染横幅；返回 (横幅 HTML, 预警列表, 跳转按钮可见性)。"""
     items, notice = _fetch_alerts()
-    return alerts.banner_html(items, dismissed, notice), items
+    html = alerts.banner_html(items, dismissed, notice)
+    return html, items, gr.update(visible=bool(html))
+
+
+def refresh_dashboard():
+    """仪表盘首屏（P1-3/B5）：本月支出 + 预算剩余 + 迷你环形进度。"""
+    month = date.today().strftime("%Y-%m")
+    notice = ""
+    try:
+        summary = api.stats_summary(month)
+    except api.ApiError as exc:
+        if api.should_fallback(exc):
+            summary = mock.stats_summary(month)
+            notice = mock.NOTICE
+        else:
+            summary = {"total": None, "count": 0, "daily_avg": None}
+
+    try:
+        items = api.budget_alerts(month).get("items") or []
+    except api.ApiError as exc:
+        if api.should_fallback(exc):
+            items = mock.budget_alerts(month).get("items") or []
+        else:
+            items = []
+    total = next((i for i in items if not i.get("category")), None)
+    return c.dashboard_card(summary, total, notice)
+
+
+GOTO_BUDGET_JS = (
+    "() => {"
+    "  const el = document.getElementById('tab-budget');"
+    "  if (el) { el.click(); return; }"
+    "  const btn = [...document.querySelectorAll('button')]"
+    "    .find(b => b.textContent.includes('预算中心'));"
+    "  if (btn) btn.click();"
+    "}"
+)
 
 
 def dismiss_banner(items: list, dismissed: set):
     """关闭按钮：把当前活跃提醒全部标记已读（本会话内不再弹同一条）。"""
     dismissed = set(dismissed or ()) | {alerts.alert_key(item) for item in items or []}
-    return alerts.banner_html(items, dismissed, ""), dismissed
+    html = alerts.banner_html(items, dismissed, "")
+    return html, dismissed, gr.update(visible=bool(html))
 
 
 def check_health():
@@ -93,6 +130,10 @@ def create_app() -> gr.Blocks:
         alerts_state = gr.State([])
         with gr.Row(equal_height=True, visible=True):
             banner = gr.HTML("", elem_classes=["fa-banner-wrap"])
+            goto_budget_btn = gr.Button(
+                "查看预算", variant="secondary", scale=0, size="sm",
+                elem_classes=["fa-jump-btn"], visible=False,
+            )
             dismiss_btn = gr.Button("✕", elem_classes=["fa-banner-close"], scale=0)
 
         # 后端健康提示条（P0-1）：默认隐藏，/health 失败时出现
@@ -100,17 +141,22 @@ def create_app() -> gr.Blocks:
             health_html = gr.HTML("")
             health_retry = gr.Button("重试连接", variant="secondary", scale=0, size="sm")
 
-        with gr.Tabs():
-            with gr.Tab("记账对话", id="tab-chat"):
-                chat_handles = build_chat_tab()
-            with gr.Tab("明细管理", id="tab-records") as records_tab_item:
-                records_handles = build_records_tab()
-            with gr.Tab("统计图表", id="tab-stats") as stats_tab_item:
-                stats_handles = build_stats_tab()
-            with gr.Tab("预算中心", id="tab-budget") as budget_tab_item:
-                budget_handles = build_budget_tab()
-            with gr.Tab("演示入口", id="tab-demo") as demo_tab_item:
-                demo_handles = build_demo_tab()
+        # 仪表盘式首屏（P1-3 / B5）：左栏大数字 + 环形进度常驻，右侧 Tab 内容
+        with gr.Row(equal_height=False):
+            with gr.Column(scale=0, min_width=236, elem_classes=["fa-dash-col"]):
+                dashboard = gr.HTML("", elem_classes=["fa-dash"])
+            with gr.Column(scale=6, elem_classes=["fa-main-col"]):
+                with gr.Tabs():
+                    with gr.Tab("记账对话", id="tab-chat"):
+                        chat_handles = build_chat_tab()
+                    with gr.Tab("明细管理", id="tab-records") as records_tab_item:
+                        records_handles = build_records_tab()
+                    with gr.Tab("统计图表", id="tab-stats") as stats_tab_item:
+                        stats_handles = build_stats_tab()
+                    with gr.Tab("预算中心", id="tab-budget") as budget_tab_item:
+                        budget_handles = build_budget_tab()
+                    with gr.Tab("演示入口", id="tab-demo") as demo_tab_item:
+                        demo_handles = build_demo_tab()
 
         # 首次切到明细页时自动加载第一页（后端未启动时降级本地演示数据）
         records_tab_item.select(
@@ -133,25 +179,36 @@ def create_app() -> gr.Blocks:
 
         # ---- 横幅刷新时机（P1-2）：页面加载 / 切预算页 / 入库成功 / 演示灌入，Timer(60) 兜底 ----
         banner_inputs = [dismissed_state]
-        banner_outputs = [banner, alerts_state]
+        banner_outputs = [banner, alerts_state, goto_budget_btn]
+        dash_outputs = [dashboard]
         demo.load(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+        demo.load(refresh_dashboard, inputs=None, outputs=dash_outputs)
 
         # P0-1：启动自检 + 手动重试（后端重启后无需刷新即可恢复）
         demo.load(check_health, inputs=None, outputs=[health_row, health_html])
         health_retry.click(check_health, inputs=None, outputs=[health_row, health_html])
         budget_tab_item.select(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+        budget_tab_item.select(refresh_dashboard, inputs=None, outputs=dash_outputs)
         chat_handles["confirm_event"].then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+        chat_handles["confirm_event"].then(refresh_dashboard, inputs=None, outputs=dash_outputs)
         chat_handles["ocr_confirm_event"].then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+        chat_handles["ocr_confirm_event"].then(refresh_dashboard, inputs=None, outputs=dash_outputs)
         demo_handles["load_event"].then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+        demo_handles["load_event"].then(refresh_dashboard, inputs=None, outputs=dash_outputs)
         demo_handles["reset_event"].then(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+        demo_handles["reset_event"].then(refresh_dashboard, inputs=None, outputs=dash_outputs)
         timer = gr.Timer(60)
         timer.tick(refresh_banner, inputs=banner_inputs, outputs=banner_outputs)
+        timer.tick(refresh_dashboard, inputs=None, outputs=dash_outputs)
+
+        # P1-2 收尾：点「查看预算」跳到预算页（js 直点页签）
+        goto_budget_btn.click(fn=None, inputs=None, outputs=None, js=GOTO_BUDGET_JS)
 
         # ---- 关闭横幅：按 category+status 指纹标记已读，本会话内不再弹同一条 ----
         dismiss_btn.click(
             dismiss_banner,
             inputs=[alerts_state, dismissed_state],
-            outputs=[banner, dismissed_state],
+            outputs=[banner, dismissed_state, goto_budget_btn],
         )
 
         gr.HTML(c.footer_note())

@@ -5,6 +5,8 @@
 新消息自动滚动由 gr.Chatbot(autoscroll=True) 原生承担。
 """
 
+from datetime import datetime
+
 from ui.cards import format_yuan
 
 GREETING = (
@@ -12,6 +14,15 @@ GREETING = (
     "也能直接问我「上个月吃饭花了多少」。\n\n"
     "信息不全时我会反问你，补齐后在右侧确认卡核对入库。"
 )
+
+
+def stamp(text: str) -> str:
+    """给气泡内容追加时间戳（P1-3：气泡带时间）。
+
+    用 <sub> 而非内联 style——Gradio 的 Markdown 会剥离 style 属性，
+    <sub> 默认更小字号，由 CSS 补透明度。
+    """
+    return f"{text}\n\n<sub>{datetime.now().strftime('%H:%M')}</sub>"
 
 
 def draft_summary(draft: dict) -> str:

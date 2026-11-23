@@ -22,6 +22,20 @@
     --fa-over-strong: #dc2626;
     --fa-radius: 14px;
     --fa-shadow: 0 1px 2px rgba(20, 35, 31, .04), 0 8px 24px rgba(20, 35, 31, .05);
+
+    /* P1-3 设计令牌：对齐 week2 文档命名（--brand/--warning/--danger/--bg/...）。
+       色值保留 PR#16 定稿的 teal 视觉体系——令牌名与文档一致，值以本文件为准。 */
+    --brand: var(--fa-primary);
+    --brand-dark: var(--fa-primary-dark);
+    --brand-soft: var(--fa-primary-soft);
+    --warning: var(--fa-warning-strong);
+    --danger: var(--fa-over-strong);
+    --bg: var(--fa-bg);
+    --surface: var(--fa-surface);
+    --text: var(--fa-ink);
+    --text-2: var(--fa-muted);
+    --radius: 12px;
+    --space: 8px;
 }
 
 /* 页面底色与字体 */
@@ -299,9 +313,11 @@ footer {
 }
 
 .fa-amount {
-    font-size: 19px;
+    /* P1-3 / B2：金额是草稿卡唯一视觉焦点，28px / 700 */
+    font-size: 28px;
     font-weight: 700;
     color: var(--fa-primary-dark);
+    line-height: 1.2;
 }
 
 /* ------------------------------ 预算进度 ------------------------------ */
@@ -921,4 +937,116 @@ button.fa-attach-item::after {
 .modebar-container {
     display: none !important;
 }
+
+/* ---------------------------------------------------------------- 仪表盘首屏（P1-3 / B5） */
+.fa-dash {
+    background: var(--fa-surface);
+    border: 1px solid var(--fa-border);
+    border-radius: var(--fa-radius);
+    padding: 18px 16px;
+    box-shadow: var(--fa-shadow);
+}
+
+.fa-dash-label {
+    font-size: 12px;
+    color: var(--fa-muted);
+    letter-spacing: .3px;
+}
+
+.fa-dash-big {
+    font-size: 27px;
+    font-weight: 800;
+    color: var(--fa-primary-dark);
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+.fa-dash-sub {
+    font-size: 11.5px;
+    color: var(--fa-muted);
+    margin-top: 4px;
+}
+
+/* 迷你环形进度：conic-gradient 双层圆，--pct 由内联 style 注入 */
+.fa-ring {
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    margin: 14px auto 10px;
+    display: grid;
+    place-items: center;
+    background: conic-gradient(var(--fa-primary) calc(var(--pct) * 1%), #e8efed 0);
+    transition: background .4s ease;
+}
+
+.fa-ring::before {
+    content: "";
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: var(--fa-surface);
+    grid-area: 1 / 1;
+}
+
+.fa-ring-pct {
+    grid-area: 1 / 1;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--fa-ink);
+    z-index: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.fa-ring.is-warning {
+    background: conic-gradient(var(--fa-warning-strong) calc(var(--pct) * 1%), #f6ecd8 0);
+}
+
+.fa-ring.is-over {
+    background: conic-gradient(var(--fa-over-strong) calc(var(--pct) * 1%), #f8e6e4 0);
+}
+
+.fa-dash-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12.5px;
+    color: var(--fa-muted);
+    padding: 5px 0;
+    border-top: 1px dashed #eef3f2;
+}
+
+.fa-dash-row:first-of-type {
+    border-top: 1px solid #eef3f2;
+}
+
+.fa-dash-row b {
+    color: var(--fa-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.fa-dash-row.is-muted b {
+    color: var(--fa-muted);
+    font-weight: 550;
+}
+
+.fa-dash-notice {
+    font-size: 10.5px;
+    color: var(--fa-muted);
+    opacity: .8;
+    margin-top: 6px;
+}
+
+/* 气泡时间戳（P1-3）：<sub> 由 chatui.stamp 注入 */
+.fa-chat sub {
+    font-size: 10px;
+    opacity: .55;
+}
+
+/* 窄屏（B8）：仪表盘收到顶部，不挤压主内容 */
+@media (max-width: 900px) {
+    .fa-dash-col {
+        min-width: 100% !important;
+    }
+}
+
 
