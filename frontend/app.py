@@ -111,8 +111,8 @@ DEMO_STYLE_CSS = """
 .gradio-container { font-size: 15px !important; }
 .tab-nav button { font-size: 15px !important; }
 .fa-toolbar .btn, .fa-jump-btn { min-height: 44px !important; }
-.fa-metric-value { font-size: 27px !important; }
-.fa-dash-big { font-size: 30px !important; }
+.fa-metric-value { font-size: clamp(22px, 2vw, 26px) !important; }
+.fa-dash-big { font-size: clamp(21px, 2vw, 27px) !important; }
 .fa-amount { font-size: 30px !important; }
 .fa-banner { font-size: 15px !important; }
 .fa-chat .message { font-size: 14.5px !important; }

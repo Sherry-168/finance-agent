@@ -945,6 +945,20 @@ button.fa-attach-item::after {
     border-radius: var(--fa-radius);
     padding: 18px 16px;
     box-shadow: var(--fa-shadow);
+    min-width: 0;
+    overflow: hidden; /* 兜底：任何情况下数字都不溢出卡片 */
+}
+
+/* 固定左栏宽度：Gradio 的 scale=0 会把列压到 ~140px，导致大数字出血 */
+.fa-dash-col {
+    flex: 0 0 244px !important;
+    min-width: 244px !important;
+    max-width: 244px !important;
+}
+
+.fa-main-col {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
 }
 
 .fa-dash-label {
@@ -954,11 +968,15 @@ button.fa-attach-item::after {
 }
 
 .fa-dash-big {
-    font-size: 27px;
+    /* 自适应字号：金额位数多时自动缩小，绝不撑破卡片 */
+    font-size: clamp(20px, 1.9vw, 26px);
     font-weight: 800;
     color: var(--fa-primary-dark);
     margin-top: 4px;
     font-variant-numeric: tabular-nums;
+    letter-spacing: -.5px;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 .fa-dash-sub {
@@ -1045,7 +1063,9 @@ button.fa-attach-item::after {
 /* 窄屏（B8）：仪表盘收到顶部，不挤压主内容 */
 @media (max-width: 900px) {
     .fa-dash-col {
+        flex: 1 1 100% !important;
         min-width: 100% !important;
+        max-width: 100% !important;
     }
 }
 
