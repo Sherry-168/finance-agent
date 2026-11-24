@@ -340,3 +340,122 @@ def count_records(
         sql += " AND confirmed = ?"
         args.append(int(confirmed))
     return int(conn.execute(sql, args).fetchone()["total"])
+
+
+# ---------------------------------------------------------------------------
+# 主动提醒（notifications）—— 第二周新增
+# ---------------------------------------------------------------------------
+
+
+def insert_notifications(
+    conn: sqlite3.Connection,
+    items: list[dict[str, Any]],
+    user_id: str = DEFAULT_USER,
+) -> int:
+    """批量写入通知，返回写入条数。item 需含 type/level/title/message。"""
+    n = 0
+    for it in items:
+        conn.execute(
+            """INSERT INTO notifications
+               (user_id, type, category, level, title, message, data)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                user_id,
+                it["type"],
+                it.get("category"),
+                it["level"],
+                it["title"],
+                it["message"],
+                json.dumps(it["data"], ensure_ascii=False) if it.get("data") else None,
+            ),
+        )
+        n += 1
+    conn.commit()
+    return n
+
+
+def list_notifications(
+    conn: sqlite3.Connection,
+    unread_only: bool = False,
+    user_id: str = DEFAULT_USER,
+) -> list[dict[str, Any]]:
+    """查询通知，按时间倒序。unread_only=True 只返回未读。"""
+    sql = "SELECT * FROM notifications WHERE user_id = ?"
+    args: list[Any] = [user_id]
+    if unread_only:
+        sql += " AND is_read = 0"
+    sql += " ORDER BY created_at DESC, id DESC"
+    rows = conn.execute(sql, args).fetchall()
+    result = []
+    for r in rows:
+        item = dict(r)
+        item["data"] = json.loads(r["data"]) if r["data"] else None
+        result.append(item)
+    return result
+
+
+def mark_notification_read(
+    conn: sqlite3.Connection,
+    notification_id: int,
+    user_id: str = DEFAULT_USER,
+) -> None:
+    """把单条通知标记为已读。"""
+    conn.execute(
+        "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
+        (int(notification_id), user_id),
+    )
+    conn.commit()
+
+
+def count_unread_notifications(conn: sqlite3.Connection, user_id: str = DEFAULT_USER) -> int:
+    """未读通知数（前端横幅角标用）。"""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND is_read = 0",
+        (user_id,),
+    ).fetchone()
+    return int(row["n"])
+
+
+def clear_notifications(conn: sqlite3.Connection, user_id: str = DEFAULT_USER) -> int:
+    """清空该用户全部通知（演示数据重置用），返回删除条数。"""
+    total = int(
+        conn.execute("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ?", (user_id,))
+        .fetchone()["n"]
+    )
+    conn.execute("DELETE FROM notifications WHERE user_id = ?", (user_id,))
+    conn.commit()
+    return total
+
+
+def scan_and_notify(
+    conn: sqlite3.Connection,
+    month: str | None = None,
+    user_id: str = DEFAULT_USER,
+) -> dict[str, int]:
+    """事件驱动入口：扫描本月预算警戒 + 异常消费，生成通知并落库。
+
+    返回 {'budget': n, 'anomaly': m, 'total': n+m}。
+    每次扫描先清空该用户未读通知（已读保留为历史），再写入最新结果，避免重复堆积。
+    由后端在「确认入库后」与「前端拉取 /alerts 时」调用。
+    """
+    import datetime as dt
+
+    from logic.anomaly import detect_anomalies
+    from logic.notify import build_anomaly_notifications, build_budget_notifications
+
+    month = month or dt.date.today().strftime("%Y-%m")
+    start, end = _month_range(month)
+
+    # 1) 预算警戒
+    budget_items = build_budget_notifications(budget_alerts(conn, month=month, user_id=user_id))
+
+    # 2) 异常巡检：本月记录 vs 近 90 天历史（历史不含本月，避免本月大额抬高均值）
+    history_start = (dt.date.fromisoformat(start) - dt.timedelta(days=90)).isoformat()
+    current = query_records(conn, start=start, end=end, confirmed=1, user_id=user_id)
+    history = query_records(conn, start=history_start, end=start, confirmed=1, user_id=user_id)
+    anomaly_items = build_anomaly_notifications(detect_anomalies(current, history))
+
+    items = budget_items + anomaly_items
+    conn.execute("DELETE FROM notifications WHERE user_id = ? AND is_read = 0", (user_id,))
+    n = insert_notifications(conn, items, user_id=user_id)
+    return {"budget": len(budget_items), "anomaly": len(anomaly_items), "total": n}
