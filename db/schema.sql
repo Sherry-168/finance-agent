@@ -46,3 +46,19 @@ CREATE TABLE IF NOT EXISTS sessions (
     context    TEXT,                                          -- JSON：待补全的草稿槽位
     updated_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
+
+-- 主动提醒表（预算警戒 / 异常巡检），第二周新增
+CREATE TABLE IF NOT EXISTS notifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     TEXT    NOT NULL DEFAULT 'demo_user',
+    type        TEXT    NOT NULL CHECK (type IN ('budget_warning', 'budget_over', 'anomaly')),
+    category    TEXT,                                         -- 关联分类；总额预算为 NULL
+    level       TEXT    NOT NULL CHECK (level IN ('warning', 'danger')),
+    title       TEXT    NOT NULL,
+    message     TEXT    NOT NULL,
+    data        TEXT,                                         -- JSON 附加数据（used_ratio、amount 等）
+    is_read     INTEGER NOT NULL DEFAULT 0,                   -- 0 未读 1 已读
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read, created_at);
