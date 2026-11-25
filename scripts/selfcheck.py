@@ -76,12 +76,33 @@ def test_dao_roundtrip():
     conn.close()
 
 
+def test_notify_dedupe():
+    """提醒去重：重复扫描不能把「已关闭」的横幅刷回未读。"""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    dao.init_db(conn)
+    dao.set_budget(conn, "2026-11", 10000, category="餐饮")
+    dao.add_record(conn, {"amount_cents": 12000, "category": "餐饮", "occurred_at": "2026-11-10 12:00"})
+
+    first = dao.scan_and_notify(conn, month="2026-11")
+    assert first["inserted"] == 1
+    row = dao.list_notifications(conn, unread_only=True)[0]
+    dao.mark_notification_read(conn, row["id"])
+
+    second = dao.scan_and_notify(conn, month="2026-11")
+    assert second["inserted"] == 0 and second["updated"] == 1
+    assert dao.count_unread_notifications(conn) == 0
+    assert len(dao.list_notifications(conn)) == 1  # 不堆积重复行
+    conn.close()
+
+
 check("金额换算", test_money)
 check("规则分类", test_classify)
 check("查账时间解析", test_query_parser)
 check("预算逻辑", test_budget)
 check("统计逻辑", test_stats)
 check("DAO 入库往返", test_dao_roundtrip)
+check("主动提醒去重", test_notify_dedupe)
 
 failed = [c for c in checks if not c[1]]
 for name, ok, err in checks:

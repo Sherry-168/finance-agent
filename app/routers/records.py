@@ -1,23 +1,24 @@
 """记账路由：解析草稿、确认入库、明细增删改查。
 
 分层（详见 docs/backend-api-review.md 与 docs/api.md）：
-- 解析走 `app.adapters.parser`（LLM 优先、规则兜底），路由不接触 Prompt；
+- 解析走 `app.adapters.parser`（LLM / Dify 优先、规则兜底），路由不接触 Prompt；
+- 草稿结构（反问文案 / 缺失字段 / 草稿 id）统一由 `app.services.draft` 拼装，
+  与 `/voice`、`/records/ocr` 共用同一套实现，避免三份逻辑跑偏；
 - 落库走 `db.dao`（金额在 DAO 内「元 ↔ 分」换算），路由不裸写 SQL；
 - 对外金额一律「元」浮点，`confirmed` 区分草稿(0)/已确认(1)。
 """
 from __future__ import annotations
 
 import datetime as dt
-import uuid
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from app.adapters.parser import parse_text
 from app.core.config import DEFAULT_USER_ID
 from app.core.db import get_db
 from app.core.response import ApiError, NOT_FOUND, PARAM_ERROR, ok
+from app.services.draft import build_draft, commit_draft
 from db import dao
 from logic.classify import normalize_category
 from logic.money import cents_to_yuan, yuan_to_cents
@@ -89,63 +90,13 @@ def _exclusive_end(end: str | None) -> str | None:
     return (day + dt.timedelta(days=1)).isoformat()
 
 
-def _next_draft_id() -> str:
-    """草稿 id：只需在同一会话内可回溯，不做持久化。"""
-    return f"d_{uuid.uuid4().hex[:8]}"
-
-
 # ---------------------------------------------------------------- 解析
 
 
 @router.post("/parse", summary="自然语言解析为草稿（不入库）")
 def parse_record(payload: ParseRequest) -> dict[str, Any]:
     """把一句话解析成草稿，绝不入库；槽位不全时以 clarify_question 反问。"""
-    fields = parse_text(payload.text)
-    # 非记账输入（灌水 / 天气写诗等）：不生成草稿，只礼貌引导回记账场景
-    if fields.get("_rejected"):
-        return ok(
-            {
-                "draft_id": _next_draft_id(),
-                "fields": {
-                    "amount": None,
-                    "category": None,
-                    "merchant": None,
-                    "occurred_at": None,
-                    "note": None,
-                },
-                "confidence": 0.0,
-                "missing_fields": [],
-                "clarify_question": "我只能帮你记一笔支出哦～比如「昨天打车 32 块」，换个说法试试？",
-                "action": "reject",
-            }
-        )
-
-    values: dict[str, Any] = {
-        "amount": fields.get("amount"),
-        "category": normalize_category(fields.get("category")),
-        "merchant": fields.get("merchant"),
-        "occurred_at": fields.get("occurred_at"),
-        "note": fields.get("note"),
-    }
-
-    missing = [key for key in ("amount", "category", "occurred_at") if not values.get(key)]
-    clarify = None
-    if not values["amount"]:
-        clarify = "这笔大概花了多少钱？"
-    elif not values["occurred_at"]:
-        clarify = "这是哪天花的呀？（例如：昨天、11 月 14 日）"
-    elif not values["category"]:
-        clarify = "这笔算哪个类别呢？（餐饮 / 交通 / 购物 / 居住 / 娱乐 / 医疗 / 教育 / 其他）"
-
-    return ok(
-        {
-            "draft_id": _next_draft_id(),
-            "fields": values,
-            "confidence": 0.62 if clarify else 0.9,
-            "missing_fields": missing,
-            "clarify_question": clarify,
-        }
-    )
+    return ok(build_draft(payload.text))
 
 
 # ---------------------------------------------------------------- 入库
@@ -153,20 +104,33 @@ def parse_record(payload: ParseRequest) -> dict[str, Any]:
 
 @router.post("", summary="确认入库（可带修正值）")
 def create_record(payload: RecordCreateRequest, conn: Any = Depends(get_db)) -> dict[str, Any]:
-    """确认后写入 records 表，返回自增 id。"""
-    record = dao.from_slot_json(
+    """确认后写入 records 表，返回自增 id 与最新未读提醒数。"""
+    try:
+        record_id = commit_draft(
+            conn,
+            {
+                "amount": payload.amount,
+                "category": payload.category,
+                "merchant": payload.merchant,
+                "occurred_at": payload.occurred_at,
+                "note": payload.note,
+            },
+            raw_text=payload.raw_text,
+            source=payload.source,
+            user_id=DEFAULT_USER_ID,
+        )
+    except ValueError as exc:  # 槽位不合法（如金额被改成 0）统一走 1001
+        raise ApiError(PARAM_ERROR, str(exc))
+
+    # 入库后已自动扫过预算 / 异常（commit_draft 内部），这里把未读数一并回给前端，
+    # 聊天页确认后即可直接点亮顶部横幅，不必再等下一次轮询。
+    return ok(
         {
-            "amount": payload.amount,
-            "category": payload.category,
-            "merchant": payload.merchant,
-            "occurred_at": payload.occurred_at,
-            "note": payload.note,
-            "source": payload.source,
-            "raw_text": payload.raw_text,
+            "id": record_id,
+            "confirmed": 1,
+            "unread_alerts": dao.count_unread_notifications(conn, user_id=DEFAULT_USER_ID),
         }
     )
-    record_id = dao.add_record(conn, record, user_id=DEFAULT_USER_ID, confirmed=1)
-    return ok({"id": record_id, "confirmed": 1})
 
 
 # ---------------------------------------------------------------- 明细查询

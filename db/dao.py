@@ -21,8 +21,15 @@ DEFAULT_USER = "demo_user"
 
 
 def connect(db_path: str = "data/finance.db") -> sqlite3.Connection:
-    """建立连接。db_path 相对项目根目录。"""
-    conn = sqlite3.connect(ROOT / db_path)
+    """建立连接。db_path 相对项目根目录。
+
+    `check_same_thread=False` 是 FastAPI + SQLite 的标准配置：`async def` 路由里的
+    `Depends(get_db)` 由线程池创建连接、却可能在事件循环线程里使用，默认的同线程校验
+    会直接抛 `SQLite objects created in a thread can only be used in that same thread`
+    （第二周 `/voice` 的 auto_commit 就踩到了）。连接仍是每请求一条、用完即关，
+    不存在跨请求共享，因此跨线程放行是安全的。
+    """
+    conn = sqlite3.connect(ROOT / db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -434,11 +441,19 @@ def scan_and_notify(
 ) -> dict[str, int]:
     """事件驱动入口：扫描本月预算警戒 + 异常消费，生成通知并落库。
 
-    返回 {'budget': n, 'anomaly': m, 'total': n+m}。
-    每次扫描先清空该用户未读通知（已读保留为历史），再写入最新结果，避免重复堆积。
+    返回 {'budget': n, 'anomaly': m, 'total': n+m, 'inserted': i, 'updated': u}。
     由后端在「确认入库后」与「前端拉取 /alerts 时」调用。
+
+    去重口径（第二周补，避免「关掉又冒出来」）
+    ----------------------------------------
+    提醒的业务主键是 `(type, category, month)`：
+    - 同一个月里同一类提醒只保留一行，重复扫描**原地刷新**文案与数字，
+      `is_read` 保持不变——用户点过「关闭」就不该在下次轮询时又弹回来；
+    - 条件已经不再成立的未读提醒（比如把超支那笔删了）会被清掉，避免挂着一堆僵尸横幅；
+    - 已读历史一律保留；换月后 month 变化，新月份的提醒会重新出现并被算作未读。
     """
     import datetime as dt
+    import json as _json
 
     from logic.anomaly import detect_anomalies
     from logic.notify import build_anomaly_notifications, build_budget_notifications
@@ -456,6 +471,59 @@ def scan_and_notify(
     anomaly_items = build_anomaly_notifications(detect_anomalies(current, history))
 
     items = budget_items + anomaly_items
-    conn.execute("DELETE FROM notifications WHERE user_id = ? AND is_read = 0", (user_id,))
-    n = insert_notifications(conn, items, user_id=user_id)
-    return {"budget": len(budget_items), "anomaly": len(anomaly_items), "total": n}
+    # month 写进 data：既是去重键的一部分，也让前端知道这条提醒属于哪个月
+    for item in items:
+        item.setdefault("data", {})
+        item["data"]["month"] = month
+
+    def _key(kind: str, category: Any, data: Any) -> tuple[str, Any, Any]:
+        """提醒的业务主键：类型 + 分类 + 月份。"""
+        parsed = data
+        if isinstance(data, str):
+            try:
+                parsed = _json.loads(data)
+            except ValueError:
+                parsed = {}
+        month_of_row = parsed.get("month") if isinstance(parsed, dict) else None
+        return (kind, category, month_of_row)
+
+    existing = {_key(row["type"], row["category"], row["data"]): row for row in list_notifications(conn, user_id=user_id)}
+    keep = {_key(item["type"], item.get("category"), item.get("data")) for item in items}
+
+    # 清掉「条件已消失」的未读提醒（已读历史保留）
+    for row in list_notifications(conn, unread_only=True, user_id=user_id):
+        if _key(row["type"], row["category"], row["data"]) not in keep:
+            conn.execute(
+                "DELETE FROM notifications WHERE id = ? AND user_id = ?",
+                (row["id"], user_id),
+            )
+    conn.commit()
+
+    inserted, updated = [], 0
+    for item in items:
+        row = existing.get(_key(item["type"], item.get("category"), item.get("data")))
+        if row is None:
+            inserted.append(item)
+            continue
+        # 原地刷新内容但保留 is_read / created_at：数字保持最新，「已关闭」不被重置
+        conn.execute(
+            "UPDATE notifications SET level = ?, title = ?, message = ?, data = ? WHERE id = ?",
+            (
+                item["level"],
+                item["title"],
+                item["message"],
+                _json.dumps(item["data"], ensure_ascii=False) if item.get("data") else None,
+                row["id"],
+            ),
+        )
+        updated += 1
+    conn.commit()
+
+    n = insert_notifications(conn, inserted, user_id=user_id)
+    return {
+        "budget": len(budget_items),
+        "anomaly": len(anomaly_items),
+        "total": len(items),
+        "inserted": n,
+        "updated": updated,
+    }

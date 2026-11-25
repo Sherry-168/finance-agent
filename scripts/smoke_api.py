@@ -60,6 +60,15 @@ def main() -> int:
 
     answer = api.query("这个月哪类花得最多？", "smoke")
     show("query", answer.get("answer_text"))
+
+    # 第二周新增：主动提醒横幅数据源 + 语音能力探测
+    alerts = api.request("GET", "/alerts", params={"month": month}) or {}
+    show("alerts", [
+        (item["level"], item["title"], item["is_read"]) for item in alerts.get("items", [])
+    ])
+    show("alerts_unread", alerts.get("unread_count"))
+    voice = api.request("GET", "/voice/status") or {}
+    show("voice_status", voice)
     return 0
 
 
