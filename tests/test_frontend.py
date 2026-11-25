@@ -9,7 +9,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "frontend"))
 
 import api  # noqa: E402
-from ui import components as c  # noqa: E402
+from ui import cards as c  # noqa: E402
+from ui import chat as chatui  # noqa: E402
 from ui.tabs import budget_tab, chat_tab  # noqa: E402
 
 
@@ -35,7 +36,7 @@ def test_query_intent_routes_to_answer_text(monkeypatch):
 
 
 def test_query_table_markdown_uses_backend_numbers():
-    markdown = c.query_table_markdown(
+    markdown = chatui.query_table_markdown(
         [{"category": "餐饮", "total": 1286.5, "count": 42}]
     )
     assert "| 餐饮 | ¥1,286.50 | 42 |" in markdown

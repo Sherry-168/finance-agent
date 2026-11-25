@@ -22,9 +22,12 @@ def app_theme() -> gr.themes.Base:
     """主题色与自定义 CSS 保持一致的浅色主题。"""
     return gr.themes.Soft(
         primary_hue=gr.themes.colors.teal,
-        secondary_hue=gr.themes.colors.emerald,
+        secondary_hue=gr.themes.colors.slate,
         neutral_hue=gr.themes.colors.slate,
-        radius_size=gr.themes.sizes.radius_md,
+        radius_size=gr.themes.sizes.radius_lg,
         # 只用系统字体，避免离线 / 内网评审环境加载外链字体失败
-        font=["Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", "system-ui", "sans-serif"],
+        font=[
+            "-apple-system", "BlinkMacSystemFont", "SF Pro Text", "PingFang SC",
+            "Microsoft YaHei", "Noto Sans SC", "Segoe UI", "sans-serif",
+        ],
     )

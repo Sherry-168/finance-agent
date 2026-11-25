@@ -423,16 +423,22 @@ def build_chat_tab() -> dict:
     ocr_menu_state = gr.State(False)
     ocr_menu_mode = gr.State("")  # "" / "voice" / "plus"
 
-    with gr.Row(equal_height=False):
-        with gr.Column(scale=3, elem_classes=["fa-panel"]):
+    with gr.Row(equal_height=False, elem_classes=["fa-chat-row"]):
+        with gr.Column(scale=1, elem_classes=["fa-panel"]):
             gr.HTML(c.section_head("对话记账", "一句话 → 草稿 → 确认入库"))
             chatbot = gr.Chatbot(
                 label="记账对话",
                 value=[{"role": "assistant", "content": GREETING}],
-                height=380,
                 autoscroll=True,  # 新消息自动滚动到底部（week2 P0-2 / P1-3）
                 elem_classes=["fa-chat"],
             )
+
+            with gr.Row(elem_classes=["fa-example-chips"]):
+                example_buttons = []
+                for example in ("打车32块", "吃饭18块", "买菜50块", "存钱500", "这个月花了多少"):
+                    example_buttons.append(
+                        gr.Button(example, elem_classes=["fa-example-chip"], scale=0)
+                    )
 
             # 底部输入栏：＋ 展开附件面板 / 文本输入 / 语音输入占位 / 发送。
             # 图标统一用 CSS 数据 URI 绘制（见 style.css），避免系统字体把 ＋/➤/▣
@@ -514,7 +520,7 @@ def build_chat_tab() -> dict:
                             scale=0,
                         )
 
-        with gr.Column(scale=2):
+        with gr.Column(scale=0, min_width=288, elem_classes=["fa-confirm-col"]):
             gr.HTML(c.section_head("草稿确认卡", "确认后才会入库"))
             draft_area = gr.HTML(c.draft_card_placeholder())
             with gr.Group(visible=False) as draft_form:
@@ -528,7 +534,10 @@ def build_chat_tab() -> dict:
                 occurred_in = gr.Textbox(label="消费时间（YYYY-MM-DD）", placeholder="2026-11-16")
                 note_in = gr.Textbox(label="备注（可空）")
                 with gr.Row(elem_classes=["fa-toolbar"]):
-                    confirm_btn = gr.Button("确认入库", variant="primary", scale=2)
+                    confirm_btn = gr.Button(
+                        "确认入库", variant="primary", scale=2,
+                        elem_classes=["fa-primary-cta"],
+                    )
                     discard_btn = gr.Button("放弃草稿", variant="stop", scale=1)
 
             with gr.Group(visible=False) as ocr_panel:
@@ -539,18 +548,18 @@ def build_chat_tab() -> dict:
                     label="选择要入库的条目", choices=[], value=[]
                 )
                 with gr.Row(elem_classes=["fa-toolbar"]):
-                    ocr_confirm_btn = gr.Button("入库所选", variant="primary", scale=2)
+                    ocr_confirm_btn = gr.Button(
+                        "入库所选", variant="primary", scale=2,
+                        elem_classes=["fa-primary-cta"],
+                    )
                     ocr_discard_btn = gr.Button("放弃小票草稿", variant="stop", scale=1)
 
-    gr.HTML(
-        c.tip(
-            "交互约定：问句（含「多少 / 占比 / 趋势」等）走查账接口，只展示后端算好的回答与表格；"
-            "记账语句生成草稿，确认后才入库；点「🎤」或「＋」可录音转写（回填文本框确认后发送）"
-            "与拍照 / 相册小票识别，Excel 导入为占位入口。麦克风不可用时请直接打字。"
-        )
-    )
+            today_overview = gr.HTML(c.today_overview_skeleton(), elem_classes=["fa-today-slot"])
 
     # ---------------- 事件绑定 ----------------
+    for button, example in zip(example_buttons, ("打车32块", "吃饭18块", "买菜50块", "存钱500", "这个月花了多少")):
+        button.click(lambda value=example: value, inputs=None, outputs=[text_input])
+
     respond_inputs = [text_input, chatbot, session_state, draft_state]
     respond_outputs = [
         chatbot,
@@ -622,6 +631,7 @@ def build_chat_tab() -> dict:
         "ocr_discard_btn": ocr_discard_btn,
         "clear_btn": clear_btn,
         "draft_area": draft_area,
+        "today_overview": today_overview,
         "draft_form": draft_form,
         "confirm_btn": confirm_btn,
         "confirm_event": confirm_event,

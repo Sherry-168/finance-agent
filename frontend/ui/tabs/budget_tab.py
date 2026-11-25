@@ -132,7 +132,10 @@ def build_budget_tab() -> dict:
 
         with gr.Column(scale=3):
             gr.HTML(c.section_head("预算进度与提醒", "已用 ≥80% 预警、≥100% 超支"))
-            progress_area = gr.HTML(c.empty_state("尚未加载预警", "切到本页或点「加载预警」自动刷新。"))
+            progress_area = gr.HTML(c.empty_state(
+                "尚未加载预警", "切到本页或点「加载预警」自动刷新。",
+                action=("💬 先去记一笔", "sidebar-chat"),
+            ))
             budget_list_area = gr.HTML(c.budget_list([]))
 
     status_area = gr.HTML(
@@ -140,8 +143,14 @@ def build_budget_tab() -> dict:
     )
 
     stats_outputs = [status_area, progress_area, budget_list_area]
-    save_btn.click(save_and_refresh, inputs=[month_input, category_input, amount_input], outputs=stats_outputs)
-    refresh_btn.click(load_budget_data, inputs=[month_input], outputs=[progress_area, budget_list_area])
+    save_event = save_btn.click(
+        save_and_refresh,
+        inputs=[month_input, category_input, amount_input],
+        outputs=stats_outputs,
+    )
+    refresh_event = refresh_btn.click(
+        load_budget_data, inputs=[month_input], outputs=[progress_area, budget_list_area]
+    )
 
     def initial_load():
         return load_budget_data(today)
@@ -151,7 +160,9 @@ def build_budget_tab() -> dict:
         "category_input": category_input,
         "amount_input": amount_input,
         "save_btn": save_btn,
+        "save_event": save_event,
         "refresh_btn": refresh_btn,
+        "refresh_event": refresh_event,
         "progress_area": progress_area,
         "budget_list_area": budget_list_area,
         "status_area": status_area,

@@ -88,7 +88,10 @@ def _query(start, end, category, size: int, page: int):
     status = c.tip(f"已加载 {len(items)} / {result.get('total')} 条明细。", kind="ok") if notice else c.empty_state(
         "本页已加载",
         "点击表格任意一行可载入下方编辑区进行修正或删除。",
-    ) if items else c.empty_state("暂无数据", "换个筛选条件，或先在「记账对话」里记几笔。")
+    ) if items else c.empty_state(
+        "暂无数据", "换个筛选条件，或先在「记账对话」里记几笔。",
+        action=("💬 去记一笔", "sidebar-chat"),
+    )
     return rows, _page_info_html(result, notice), status, int(result.get("page") or page), items
 
 
@@ -251,10 +254,10 @@ def build_records_tab() -> dict:
         outputs=None,
         js=(
             "() => {"
-            "  const el = document.getElementById('tab-chat');"
-            "  if (el) { el.click(); return; }"
+            "  const nav = document.getElementById('sidebar-chat');"
+            "  if (nav) { nav.click(); return; }"
             "  const btn = [...document.querySelectorAll('button')]"
-            "    .find(b => b.textContent.includes('记账对话'));"
+            "    .find(b => b.textContent.includes('对话记账'));"
             "  if (btn) btn.click();"
             "}"
         ),

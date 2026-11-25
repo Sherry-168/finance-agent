@@ -256,9 +256,9 @@ def query(question: str, session_id: str) -> dict:
     }
 
 
-def stats_summary(month: str) -> dict:
+def stats_summary(month: str, timeout: float | None = None) -> dict:
     """GET /stats/summary —— 月度总额、笔数、日均。"""
-    return request("GET", "/stats/summary", params={"month": month}) or {}
+    return request("GET", "/stats/summary", params={"month": month}, timeout=timeout) or {}
 
 
 def stats_by_category(
@@ -276,9 +276,9 @@ def stats_by_category(
     return {"items": _first(data, "items", "list", default=[]) or []}
 
 
-def stats_trend(days: int = 30) -> dict:
+def stats_trend(days: int = 30, timeout: float | None = None) -> dict:
     """GET /stats/trend —— 每日趋势。"""
-    data = request("GET", "/stats/trend", params={"days": days}) or {}
+    data = request("GET", "/stats/trend", params={"days": days}, timeout=timeout) or {}
     return {"items": _first(data, "items", "list", default=[]) or []}
 
 
@@ -300,9 +300,9 @@ def save_budget(month: str, category: str | None, amount: float) -> dict:
     )
 
 
-def budget_alerts(month: str) -> dict:
+def budget_alerts(month: str, timeout: float | None = None) -> dict:
     """GET /budgets/alerts —— 各预算使用率与状态。"""
-    data = request("GET", "/budgets/alerts", params={"month": month}) or {}
+    data = request("GET", "/budgets/alerts", params={"month": month}, timeout=timeout) or {}
     return {"items": _first(data, "items", "alerts", default=[]) or []}
 
 

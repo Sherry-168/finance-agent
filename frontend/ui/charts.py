@@ -11,9 +11,13 @@ import json
 
 import plotly.graph_objects as go
 
-PLOTLY_FONT = "Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif"
-CHART_PALETTE = ["#2F6BFF", "#2A9D8F", "#F59E0B", "#E76F51", "#8B5CF6", "#0EA5E9", "#84CC16", "#EC4899"]
-_TEXT, _TEXT_2 = "#1F2329", "#8A9099"
+PLOTLY_FONT = "-apple-system, PingFang SC, Microsoft YaHei, Noto Sans SC, sans-serif"
+# v2.2 色板：统一取自深青绿 5 阶 + 中性灰，红/黄只作末位语义点缀
+CHART_PALETTE = [
+    "#0F9D8A", "#14B8A6", "#2DD4BF", "#104A44",
+    "#6B7280", "#9CA3AF", "#F5C26B", "#E05B5B",
+]
+_TEXT, _TEXT_2 = "#1F2937", "#6B7280"
 
 
 def _chart_layout(fig: "go.Figure", legend: bool = False) -> "go.Figure":

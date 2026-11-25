@@ -4,7 +4,21 @@ Gradio 原生组件对卡片、进度条支持有限，
 按《前端注意事项》第 7 条：复杂结构统一用 gr.HTML + 自定义 CSS（fa-* 类）承载。
 """
 
+from html import escape
+
 from config import APP_SUBTITLE, APP_TITLE
+
+# B2/B6：类别 chip 与图表色板共用同一组颜色，保证视觉记忆一致
+_CATEGORY_SLUG = {
+    "餐饮": "food",
+    "交通": "transport",
+    "购物": "shopping",
+    "居住": "housing",
+    "娱乐": "entertainment",
+    "医疗": "medical",
+    "教育": "education",
+    "其他": "other",
+}
 
 # ------------------------------------------------------------------ 页面骨架
 
@@ -22,6 +36,124 @@ def header() -> str:
         <span class="fa-tag">自然语言查账</span>
         <span class="fa-tag">预算提醒</span>
       </div>
+    </div>
+    """
+
+
+def view_header(title: str, breadcrumb: str) -> str:
+    """顶栏：标题 + 面包屑，分段切换与通知按钮由 app.py 以原生组件承载。"""
+    return f"""
+    <div class="fa-view-head">
+      <div class="fa-view-title">{title}</div>
+      <div class="fa-view-crumb">{breadcrumb}</div>
+    </div>
+    """
+
+
+def sidebar_budget(
+    summary: dict,
+    total_budget: dict | None,
+    notice: str = "",
+    notice_kind: str = "",
+    notice_tip: str = "",
+) -> str:
+    """侧栏预算小部件：本月支出 + 进度条 + 剩余 / 总预算。"""
+    spent = format_yuan((summary or {}).get("total"))
+    amount = (total_budget or {}).get("amount")
+    used = (total_budget or {}).get("used")
+    ratio = (total_budget or {}).get("used_ratio")
+    status = (total_budget or {}).get("status") or "normal"
+    pct = min(max(round(float(ratio) * 100), 0), 100) if isinstance(ratio, (int, float)) else 0
+    remaining = (float(amount) - float(used)) if isinstance(amount, (int, float)) and isinstance(used, (int, float)) else None
+    remaining_text = format_yuan(abs(remaining)) if remaining is not None else "--"
+    if remaining is not None and remaining < 0:
+        remaining_text = f"-{remaining_text}"
+    notice_html = ""
+    if notice:
+        title = f' title="{escape(notice_tip or notice)}"'
+        notice_html = (
+            f'<div class="fa-side-budget-note is-{notice_kind}"{title}>'
+            '<i class="fa-state-dot"></i>'
+            f"<span>{escape(notice)}</span></div>"
+        )
+    return f"""
+    <div class="fa-side-budget">
+      <div class="fa-side-budget-top">
+        <div class="fa-side-budget-label">
+          <span>本月支出</span><b>{spent}</b>
+        </div>
+        <div class="fa-side-ring is-{status}" style="--pct:{pct}"><span>{pct}%</span></div>
+      </div>
+      <div class="fa-side-budget-bar is-{status}"><i style="width:{pct}%"></i></div>
+      <div class="fa-side-budget-meta">
+        <span>剩余 {remaining_text}</span><span>总预算 {format_yuan(amount)}</span>
+      </div>
+      {notice_html}
+    </div>
+    """
+
+
+def today_overview(
+    day: dict,
+    total_budget: dict | None,
+    notice: str = "",
+    notice_kind: str = "",
+    notice_tip: str = "",
+) -> str:
+    """右侧今日概览：支出笔数 / 支出合计 / 收入合计 / 预算剩余。"""
+    count = day.get("count", 0)
+    count_text = f"{count} 笔" if isinstance(count, int) else "--"
+    spent = format_yuan(day.get("total"))
+    income = "¥ --" if notice_kind == "error" else format_yuan(day.get("income") or 0)
+    amount = (total_budget or {}).get("amount")
+    used = (total_budget or {}).get("used")
+    remaining = (float(amount) - float(used)) if isinstance(amount, (int, float)) and isinstance(used, (int, float)) else None
+    remaining_text = format_yuan(abs(remaining)) if remaining is not None else "--"
+    if remaining is not None and remaining < 0:
+        remaining_text = f"-{remaining_text}"
+    notice_html = ""
+    if notice:
+        title = f' title="{escape(notice_tip or notice)}"'
+        notice_html = (
+            f'<div class="fa-dash-notice is-{notice_kind}"{title}>'
+            '<i class="fa-state-dot"></i>'
+            f"<span>{escape(notice)}</span></div>"
+        )
+    return f"""
+    <div class="fa-today">
+      <div class="fa-section-head"><span class="fa-section-title">今日概览</span></div>
+      <div class="fa-today-row"><span>支出笔数</span><b>{count_text}</b></div>
+      <div class="fa-today-row is-out"><span>支出合计</span><b>{spent}</b></div>
+      <div class="fa-today-row is-income"><span>收入合计</span><b>{income}</b></div>
+      <div class="fa-today-row"><span>预算剩余</span><b>{remaining_text} / {format_yuan(amount)}</b></div>
+      {notice_html}
+    </div>
+    """
+
+
+def sidebar_budget_skeleton() -> str:
+    """首帧占位：只画结构不填数据，避免先展示 Mock 数字与「示范模式」提示。"""
+    return """
+    <div class="fa-side-budget">
+      <div class="fa-side-budget-top">
+        <div class="fa-side-budget-label"><span>本月支出</span><b>¥ --</b></div>
+        <div class="fa-side-ring"><span>--</span></div>
+      </div>
+      <div class="fa-side-budget-bar"><i style="width:0%"></i></div>
+      <div class="fa-side-budget-meta"><span>剩余 --</span><span>总预算 --</span></div>
+    </div>
+    """
+
+
+def today_overview_skeleton() -> str:
+    """右侧今日概览首帧占位，语义与正式卡片保持一致。"""
+    return """
+    <div class="fa-today">
+      <div class="fa-section-head"><span class="fa-section-title">今日概览</span></div>
+      <div class="fa-today-row"><span>支出笔数</span><b>-- 笔</b></div>
+      <div class="fa-today-row is-out"><span>支出合计</span><b>¥ --</b></div>
+      <div class="fa-today-row is-income"><span>收入合计</span><b>¥ --</b></div>
+      <div class="fa-today-row"><span>预算剩余</span><b>-- / --</b></div>
     </div>
     """
 
@@ -49,11 +181,26 @@ def tip(text: str, kind: str = "info") -> str:
     return f'<div class="fa-tip{extra}">{text}</div>'
 
 
-def empty_state(title: str, desc: str) -> str:
+def empty_state(title: str, desc: str, action: tuple[str, str] | None = None) -> str:
+    """B4 空态：引导文案 + 可选跳转按钮。
+
+    action=(按钮文案, 侧栏导航 elem_id)，如 ("💬 去记一笔", "sidebar-chat")。
+    gr.HTML 内按钮无法绑 Gradio 事件，用内联 onclick 点击侧栏导航实现跳转。
+    """
+    action_html = ""
+    if action:
+        label, nav_id = action
+        action_html = (
+            '<button type="button" class="fa-empty-action" '
+            f"onclick=\"var el=document.getElementById('{escape(nav_id)}');"
+            "if(el){(el.querySelector('button')||el).click();}\">"
+            f"{escape(label)}</button>"
+        )
     return (
         '<div class="fa-empty">'
         f'<div class="fa-empty-title">{title}</div>'
         f'<div class="fa-empty-desc">{desc}</div>'
+        f"{action_html}"
         "</div>"
     )
 
@@ -86,6 +233,28 @@ def format_ratio(value) -> str:
     if isinstance(value, (int, float)):
         return f"{value * 100:.0f}%"
     return "--%"
+
+
+def category_chip(category: str | None) -> str:
+    """B2：类别渲染为彩色 chip，圆点颜色与图表色板同源（B6）。"""
+    if not category:
+        return '<span class="fa-cat-chip is-other"><i class="fa-cat-dot"></i>待补充</span>'
+    slug = _CATEGORY_SLUG.get(str(category), "other")
+    return (
+        f'<span class="fa-cat-chip is-{slug}">'
+        f'<i class="fa-cat-dot"></i>{escape(str(category))}</span>'
+    )
+
+
+def confidence_mark(confidence) -> str:
+    """B2：置信度用小圆点 + 数值；圆点按 ≥0.8 / ≥0.6 / <0.6 分档着色。"""
+    if not isinstance(confidence, (int, float)):
+        return '<span class="fa-conf-mark"><i class="fa-conf-dot"></i>--</span>'
+    level = "high" if confidence >= 0.8 else ("mid" if confidence >= 0.6 else "low")
+    return (
+        f'<span class="fa-conf-mark">'
+        f'<i class="fa-conf-dot is-{level}"></i>{format_ratio(confidence)}</span>'
+    )
 
 
 # ------------------------------------------------------------------ 指标卡
@@ -166,9 +335,12 @@ def draft_card(draft: dict) -> str:
 
     amount = fields.get("amount")
     amount_html = (
+        '<div class="fa-draft-amount">'
         f'<span class="fa-amount">{format_yuan(amount)}</span>'
+        '<span class="fa-draft-amount-hint">可修改后入库</span>'
+        "</div>"
         if amount is not None
-        else "待补充"
+        else '<div class="fa-draft-amount"><span class="fa-amount" style="font-size:18px">待补充</span></div>'
     )
     rows = "".join(
         [
@@ -179,7 +351,7 @@ def draft_card(draft: dict) -> str:
             ),
             _field_row(
                 "类别",
-                f"{fields.get('category') or '待补充'}"
+                category_chip(fields.get("category"))
                 + missing_mark("category")
                 + _conf_badge(low_conf),
                 unconf=low_conf,
@@ -193,8 +365,7 @@ def draft_card(draft: dict) -> str:
         ]
     )
 
-    conf_html = format_ratio(confidence) if isinstance(confidence, (int, float)) else "--"
-    rows += _field_row("置信度", conf_html)
+    rows += _field_row("置信度", confidence_mark(confidence))
 
     badge = "fa-badge is-ok" if not missing else "fa-badge is-warn"
     badge_text = "槽位齐全" if not missing else "待补充"
@@ -369,13 +540,20 @@ def dashboard_card(summary: dict, total_budget: dict | None, notice: str = "") -
         amount = None
     pct = min(round(float(ratio) * 100), 100) if isinstance(ratio, (int, float)) else 0
 
+    status_text = {"normal": "状态正常", "warning": "接近预算上限", "over": "已超支"}.get(status, "状态正常")
     notice_html = f'<div class="fa-dash-notice">{notice}</div>' if notice else ""
     return f"""
     <div class="fa-dash">
       <div class="fa-dash-label">本月支出</div>
-      <div class="fa-dash-big">{spent}</div>
-      <div class="fa-dash-sub">{sub}</div>
-      <div class="fa-ring is-{status}" style="--pct:{pct}"><div class="fa-ring-pct">{pct}%</div></div>
+      <div class="fa-dash-main">
+        <div class="fa-dash-figure">
+          <div class="fa-dash-big">{spent}</div>
+          <div class="fa-dash-sub">{sub}</div>
+        </div>
+        <div class="fa-dash-ring-wrap">
+          <div class="fa-ring is-{status}" style="--pct:{pct}"><div class="fa-ring-pct">{pct}%</div></div>
+        </div>
+      </div>
       <div class="fa-dash-row">
         <span>{remaining_label}</span>
         <b>{remaining_text}</b>
@@ -383,6 +561,7 @@ def dashboard_card(summary: dict, total_budget: dict | None, notice: str = "") -
       <div class="fa-dash-row is-muted">
         <span>总预算</span><b>{format_yuan(amount)}</b>
       </div>
+      <div class="fa-dash-status">已用 {pct}% · {status_text}</div>
       {notice_html}
     </div>
     """
