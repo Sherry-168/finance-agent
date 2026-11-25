@@ -64,6 +64,23 @@ SQLite，文件 `data/finance.db`（Docker 挂载卷持久化）。完整 DDL �
 | context    | TEXT    | JSON：待补全的草稿槽位 |
 | updated_at | TEXT    |               |
 
+### notifications（主动提醒，第二周新增）
+
+| 字段         | 类型         | 说明                                          |
+| ---------- | ---------- | ------------------------------------------- |
+| id         | INTEGER PK | 自增                                          |
+| user_id    | TEXT       | 默认 `demo_user`                              |
+| type       | TEXT       | `budget_warning` / `budget_over` / `anomaly` |
+| category   | TEXT       | 关联分类；总额预算为 NULL                            |
+| level      | TEXT       | `warning`（橙）/ `danger`（红）                  |
+| title      | TEXT       | 标题                                          |
+| message    | TEXT       | 内容                                          |
+| data       | TEXT       | JSON 附加数据（used_ratio、amount 等）              |
+| is_read    | INTEGER    | 0 未读 / 1 已读，默认 0                            |
+| created_at | TEXT       | 生成时间                                        |
+
+索引：`(user_id, is_read, created_at)`。
+
 ---
 
 ## 3. 分类体系与规则词典
@@ -118,6 +135,25 @@ DAO 内部一律「分」。后端在出入参边界调用上述两个函数即�
 
 **预算状态枚举（对齐 `/budgets/alerts`）**：`normal`（<80%）、`warning`（≥80%）、`over`（≥100%）。
 
+### 主动提醒（第二周新增，事件驱动）
+
+`logic/anomaly.py`（异常巡检，纯函数）：
+
+- `average_per_category(records)`：按类别算历史平均单笔金额。
+- `detect_anomalies(records, history, multiplier=3.0, min_cents=10000)`：
+  单笔 > 历史平均 × 3 且 > 100 元 → 判定「畸形大额消费」。阈值可调。
+
+`logic/notify.py`（通知生成，纯函数）：
+
+- `build_budget_notifications(alerts)`：把 `budget_alerts` 结果转通知（仅 warning/over）。
+- `build_anomaly_notifications(anomalies)`：把异常结果转通知。
+
+`db/dao.py` 新增 notifications DAO：`insert_notifications` / `list_notifications` /
+`mark_notification_read` / `count_unread_notifications` / `clear_notifications`。
+
+**事件驱动入口** `scan_and_notify(conn, month)`：扫描预算警戒 + 异常巡检 → 生成通知落库。
+由后端在「确认入库后」与「前端拉取 /alerts 时」调用；每次扫描先清未读再写入，避免重复堆积。
+
 ---
 
 ## 6. 查账流程（对齐 §5.2 / §9）
@@ -156,6 +192,22 @@ DAO 内部一律「分」。后端在出入参边界调用上述两个函数即�
   后端应在返回前转元，前端展示「元」。`status` 取值 `normal/warning/over`。
 - **↔ 江为（测试）**：demo CSV 字段 `date,time,description,merchant,amount,payment_method`，  
   其中 `amount` 为元，`category` 由规则词典从 `description+merchant` 推断（`scripts/load_sample.py`）。
+
+### 主动提醒接口契约建议（待与史雅萱、林丹苗对齐后写入 api.md）
+
+- **GET `/alerts`**：返回未读通知列表（前端顶部横幅数据源）。
+
+  ```json
+  { "code": 0, "data": { "items": [
+      { "id": 1, "type": "budget_over", "category": "餐饮", "level": "danger",
+        "title": "餐饮已超支", "message": "餐饮已支出 ¥120.00，超出预算 ¥100.00，请注意控制。",
+        "data": { "category": "餐饮", "used_ratio": 1.2 }, "is_read": 0, "created_at": "..." }
+  ] } }
+  ```
+
+- **POST `/alerts/{id}/read`**：标记单条已读（前端「关闭」按钮调用）。
+- 前端按 `level` 渲染横幅颜色：`warning` 橙、`danger` 红。
+- `data` 内金额为「分」，建议后端在返回前转元（前端只负责渲染与 `¥` 格式化）。
 
 ---
 
