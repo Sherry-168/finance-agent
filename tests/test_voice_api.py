@@ -120,3 +120,39 @@ def test_engine_none_blocks_voice(api, monkeypatch):
     body = _upload(api).json()
     assert body["code"] == 2003
     assert "文本输入" in body["message"]
+
+
+def test_agent_mode_unavailable_until_function_delivered(api, monkeypatch):
+    """`agent` 模式只在李语琛真的交付了 speech_to_text 后才对前端报可用。"""
+    monkeypatch.setattr("app.adapters.asr.ASR_PROVIDER", "agent")
+    monkeypatch.setattr("app.adapters.asr._agent_ready", lambda: False)
+
+    data = api.get("/api/v1/voice/status").json()["data"]
+    assert data["engine"] == "agent"
+    assert data["available"] is False
+
+    body = _upload(api).json()
+    assert body["code"] == 2003
+    # 具体原因可能是「函数没交付」或「agent.py 的依赖没装」，两者都指向 agent.py，
+    # 关键是别再糊成一句「语音不可用」——联调时要一眼看出卡在哪。
+    assert "agent.py" in body["message"]
+
+
+def test_agent_mode_calls_delivered_function(api, monkeypatch):
+    """李语琛按约定交付后，后端应把原始音频交给他并复用其返回文本。"""
+    seen = {}
+
+    def fake(audio, name=None):
+        seen["size"] = len(audio)
+        return "昨天打车 32 块"
+
+    monkeypatch.setattr("app.adapters.asr.ASR_PROVIDER", "agent")
+    monkeypatch.setattr("app.adapters.asr._agent_ready", lambda: True)
+    monkeypatch.setattr("app.adapters.asr._transcribe_agent", fake)
+
+    body = _upload(api, data=b"RIFF-payload").json()
+    assert body["code"] == 0
+    assert body["data"]["transcript"] == "昨天打车 32 块"
+    assert body["data"]["asr_engine"] == "agent"
+    assert body["data"]["fields"]["amount"] == 32.0
+    assert seen["size"] == len(b"RIFF-payload")

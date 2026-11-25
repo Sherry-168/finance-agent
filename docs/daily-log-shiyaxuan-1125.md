@@ -58,6 +58,10 @@
 
 ## 待办 / 风险
 
+- **李语琛的 `agent.py` 目前只有 `add_expense`，还没有 `speech_to_text`**：`/voice` 的 `agent` 模式已经接好
+  （`ASR_PROVIDER=agent` 会 import `agent` 并调用 `speech_to_text(audio_path)`），但在他交付该函数前
+  `GET /voice/status` 会如实返回 `available=false`，`POST /voice` 返回 2003 并指出「agent.py 里还没有该函数」。
+  另：`agent.py` 依赖 `requests`，已补进 `requirements.txt`（否则 import 就失败，报错会被误读成「找不到 agent.py」）。
 - 本机 Docker 守护进程未启动，`docker compose up --build` **未能在今日复验**（配置已按第二周变量更新，
   需在装有 Docker Desktop 的机器上跑一次确认）；接口已用 `uvicorn` 真实 HTTP + TestClient 双路径验证。
 - 云端 ASR / 视觉模型都未在此环境联调（无 Key），链路用 `mock` + monkeypatch 覆盖，需在配好 Key 的机器上实测一次。

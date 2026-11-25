@@ -52,9 +52,25 @@ def engine_name() -> str:
     return "cloud" if has_asr_key() else "none"
 
 
+def _agent_ready() -> bool:
+    """`agent` 模式下，李语琛的 `speech_to_text` 是否真的可用。
+
+    只有 `agent.py` 能导入、且函数名字对得上才算就绪——否则 `/voice/status` 会告诉前端
+    「可用」，用户录完音才在提交时收到 2003，体验很差。
+    """
+    try:
+        module = importlib.import_module("agent")
+    except Exception:  # noqa: BLE001 —— 依赖缺失 / 语法错误都算未就绪
+        return False
+    return callable(getattr(module, "speech_to_text", None))
+
+
 def is_available() -> bool:
     """语音链路是否可用（mock 也算可用，前端据此决定是否禁用录音按钮）。"""
-    return engine_name() != "none"
+    engine = engine_name()
+    if engine == "agent":
+        return _agent_ready()
+    return engine != "none"
 
 
 def _safe_suffix(filename: str | None) -> str:
@@ -100,12 +116,23 @@ def _transcribe_agent(audio: bytes, filename: str | None) -> str:
     """
     try:
         module = importlib.import_module("agent")
+    except ModuleNotFoundError as exc:
+        # 分清两种「缺东西」：缺 agent.py 本身，还是 agent.py 的第三方依赖没装。
+        # 混成一句「未找到 agent.py」会把真正原因藏起来，联调时最容易被误导。
+        if exc.name == "agent":
+            raise AsrError("仓库根目录未找到 agent.py，无法调用李语琛的 ASR 函数") from exc
+        raise AsrError(
+            f"agent.py 依赖的第三方库缺失：{exc.name}（请在 requirements 中安装后再试）"
+        ) from exc
     except ImportError as exc:
-        raise AsrError("未找到 agent.py，无法调用李语琛的 ASR 函数") from exc
+        raise AsrError(f"导入 agent.py 失败：{exc}") from exc
 
     func = getattr(module, "speech_to_text", None)
     if not callable(func):
-        raise AsrError("agent.py 中没有 speech_to_text(audio_file) 函数")
+        raise AsrError(
+            "agent.py 里还没有 speech_to_text(audio_file) 函数（需李语琛按约定交付："
+            "入参音频文件路径，返回识别文本）"
+        )
 
     suffix = _safe_suffix(filename)
     handle, path = tempfile.mkstemp(suffix=suffix)

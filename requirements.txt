@@ -10,6 +10,9 @@ python-multipart>=0.0.9,<1.0
 
 # LLM（OpenAI 兼容：DeepSeek / Qwen / GLM 任一）
 openai>=1.30,<2.0
+# 李语琛交付的根目录 agent.py 用它发 Dify 请求；`ASR_PROVIDER=agent` 会 import agent.py，
+# 因此运行期必须装得上，否则语音「调他的 ASR 函数」这条分支会因缺依赖而不可用
+requests>=2.31,<3.0
 
 # 前端（Gradio）依赖一并声明：同一镜像承载 backend 与 frontend 两个服务
 gradio>=6.0,<7.0
