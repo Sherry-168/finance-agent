@@ -1,9 +1,12 @@
 """Tab3 统计图表：月度指标卡 + 类别饼图 + 每日趋势折线。
 
-Day 5 契约（docs/api.md §5，仅统计 confirmed=1）：
+第二周口径（week2-plan P0-5）：图表库统一 **Plotly + gr.Plot**（开工对齐第①项），
+替换第一周的 ECharts iframe（ECharts 方案仍保留在 ui/charts.py 尾部作降级参考）。
+
+契约（docs/api.md §5，仅统计 confirmed=1）：
 - GET /stats/summary?month=      → 指标卡（总额 / 笔数 / 日均，后端计算）
-- GET /stats/by-category?month=  → ECharts 环形饼图
-- GET /stats/trend?days=         → ECharts 折线面积图
+- GET /stats/by-category?month=  → 环形饼图（占比 <3% 合并为「其他」）
+- GET /stats/trend?days=         → 折线图（hover：日期 · ¥金额 · N 笔）
 前端只渲染聚合结果，不做任何统计计算（注意事项 3）。
 """
 
@@ -14,8 +17,9 @@ import gradio as gr
 
 import api
 import mock
-from config import MOCK_FALLBACK  # noqa: F401  （保留给 demo_tab 提示等场景参考）
-from ui import components as c
+from config import MOCK_FALLBACK
+from ui import cards as c
+from ui import charts
 
 _MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
@@ -48,23 +52,25 @@ def _fetch_trend(days: int):
 
 
 def load_stats(month: str, days):
-    """刷新三块统计内容；返回 (metrics_html, pie_html, trend_html)。"""
+    """刷新三块统计内容；返回 (metrics_html, pie_fig, trend_fig)。"""
     month = (month or "").strip()
     days = int(days) if days else 30
+    invalid = charts.empty_figure("月份格式应为 YYYY-MM（例如 2026-11），修正后刷新")
     if not _MONTH_RE.match(month):
         return (
             c.tip("月份格式应为 YYYY-MM，例如 2026-11。", kind="error"),
-            c.chart_placeholder("fa-pie-chart", "类别占比", "修正月份后刷新"),
-            c.chart_placeholder("fa-trend-chart", "每日趋势", "修正月份后刷新"),
+            invalid,
+            invalid,
         )
 
     summary, notice_1 = _fetch_summary(month)
     by_cat, _notice_2 = _fetch_by_category(month)
     trend, _notice_3 = _fetch_trend(days)
     notice = notice_1 or ""
+
     if summary is None:
-        metrics = c.tip(f"统计获取失败：{notice_1}", kind="error")
-        return metrics, c.chart_placeholder("fa-pie-chart", "类别占比", "后端就绪后自动展示"), c.chart_placeholder("fa-trend-chart", "每日趋势", "后端就绪后自动展示")
+        err = charts.empty_figure("统计获取失败，请检查后端后点击「刷新统计」")
+        return c.tip(f"统计获取失败：{notice_1}", kind="error"), err, err
 
     metrics = c.metric_cards(
         [
@@ -77,19 +83,12 @@ def load_stats(month: str, days):
         metrics += c.tip(notice, kind="warn")
 
     cat_items = (by_cat or {}).get("items") or []
-    pie = (
-        c.chart_iframe(c.pie_spec(cat_items, notice))
-        if cat_items
-        else c.empty_state("本月暂无分类数据", "先记几笔，或切换到其他月份。")
-    )
+    pie = charts.pie_figure(cat_items) if cat_items else charts.empty_figure("本月暂无分类数据，先去记几笔")
 
     trend_items = (trend or {}).get("items") or []
-    trend = (
-        c.chart_iframe(c.trend_spec(trend_items, notice), height=300)
-        if trend_items
-        else c.empty_state("暂无趋势数据", "趋势取近 N 天已确认记录。")
-    )
-    return metrics, pie, trend
+    trend_fig = charts.trend_figure(trend_items) if trend_items else charts.empty_figure("暂无趋势数据")
+
+    return metrics, pie, trend_fig
 
 
 def build_stats_tab() -> dict:
@@ -111,20 +110,16 @@ def build_stats_tab() -> dict:
 
     with gr.Row(equal_height=True):
         with gr.Column(scale=1):
-            gr.HTML(c.section_head("类别占比", "GET /stats/by-category"))
-            pie_chart = gr.HTML(
-                c.chart_placeholder("fa-pie-chart", "ECharts 饼图", "点击「刷新统计」或切到本页自动加载")
-            )
+            gr.HTML(c.section_head("类别占比", "GET /stats/by-category · Plotly"))
+            pie_chart = gr.Plot(value=charts.empty_figure("点击「刷新统计」或切到本页自动加载"))
         with gr.Column(scale=1):
-            gr.HTML(c.section_head("每日趋势", "GET /stats/trend?days="))
-            trend_chart = gr.HTML(
-                c.chart_placeholder("fa-trend-chart", "ECharts 折线图", "点击「刷新统计」或切到本页自动加载")
-            )
+            gr.HTML(c.section_head("每日趋势", "GET /stats/trend?days= · Plotly"))
+            trend_chart = gr.Plot(value=charts.empty_figure("点击「刷新统计」或切到本页自动加载"))
 
     gr.HTML(
         c.tip(
-            "图表数据完全来自后端聚合结果，前端只做渲染；离线环境（无法加载 ECharts CDN）"
-            "自动降级为简化条形视图，数值不变。查账回答也只展示后端返回的 answer_text 与 table。"
+            "图表数据完全来自后端聚合结果，前端只做渲染（Plotly + gr.Plot）；"
+            "查账回答也只展示后端返回的 answer_text 与 table。"
         )
     )
 

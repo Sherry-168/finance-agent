@@ -19,7 +19,7 @@ from config import (
     DEFAULT_PAGE_SIZE,
     PAGE_SIZE_CHOICES,
 )
-from ui import components as c
+from ui import cards as c
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SOURCE_LABELS = {"text": "对话", "ocr": "小票", "manual": "手动"}
@@ -88,7 +88,10 @@ def _query(start, end, category, size: int, page: int):
     status = c.tip(f"已加载 {len(items)} / {result.get('total')} 条明细。", kind="ok") if notice else c.empty_state(
         "本页已加载",
         "点击表格任意一行可载入下方编辑区进行修正或删除。",
-    ) if items else c.empty_state("暂无数据", "换个筛选条件，或先在「记账对话」里记几笔。")
+    ) if items else c.empty_state(
+        "暂无数据", "换个筛选条件，或先在「记账对话」里记几笔。",
+        action=("💬 去记一笔", "sidebar-chat"),
+    )
     return rows, _page_info_html(result, notice), status, int(result.get("page") or page), items
 
 
@@ -236,6 +239,28 @@ def build_records_tab() -> dict:
 
     status_area = gr.HTML(
         c.empty_state("暂无数据", "点击「查询」加载明细；后端未启动时展示本地演示数据。")
+    )
+
+    # P0-4 空态跳转：gr.HTML 内按钮无法绑事件，用真实 Button + js 直点页签
+    jump_chat_btn = gr.Button(
+        "💬 去对话页记一笔",
+        variant="secondary",
+        size="sm",
+        elem_classes=["fa-jump-btn"],
+    )
+    jump_chat_btn.click(
+        fn=None,
+        inputs=None,
+        outputs=None,
+        js=(
+            "() => {"
+            "  const nav = document.getElementById('sidebar-chat');"
+            "  if (nav) { nav.click(); return; }"
+            "  const btn = [...document.querySelectorAll('button')]"
+            "    .find(b => b.textContent.includes('对话记账'));"
+            "  if (btn) btn.click();"
+            "}"
+        ),
     )
 
     with gr.Accordion("修改 / 删除记录（点击表格行自动载入）", open=False):

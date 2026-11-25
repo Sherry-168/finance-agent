@@ -17,13 +17,18 @@ import gradio as gr
 import api
 import mock
 from config import CATEGORIES, MOCK_FALLBACK
-from ui import components as c
+from ui import cards as c
+from ui import chat as chatui
+from ui.chat import GREETING
 
-GREETING = (
-    "你好，我是记账助手。说一句话就能记账，比如「昨天打车 32 块」；"
-    "也能直接问我「上个月吃饭花了多少」。\n\n"
-    "信息不全时我会反问你，补齐后在右侧确认卡核对入库。"
-)
+
+def _category_choices() -> list[str]:
+    """GET /categories 优先；未连通时用本地 8 类兜底。"""
+    try:
+        cats = api.list_categories()
+        return cats if cats else list(CATEGORIES)
+    except api.ApiError:
+        return list(CATEGORIES)
 
 # 契约允许纯日期或带时分（小票 OCR 草稿会带时间），见 docs/api.md §2.2
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}(?::\d{2})?)?$")
@@ -42,7 +47,8 @@ def new_session_id() -> str:
 
 def _append(history: list, role: str, content: str) -> list:
     history = list(history or [])
-    history.append({"role": role, "content": content})
+    # P1-3：气泡统一带时间戳（chatui.stamp，<sub> 由 CSS 弱化显示）
+    history.append({"role": role, "content": chatui.stamp(content)})
     return history
 
 
@@ -182,9 +188,19 @@ def confirm_ocr(selected, drafts: list, raw_text: str, history: list):
     )
 
 
+def update_ocr_count(selected, drafts: list):
+    """P2-1：长截图多笔场景的折叠计数「共 X 笔，已选 Y 笔」。"""
+    total = len(drafts or [])
+    picked = len(selected or [])
+    if not total:
+        return ""
+    return c.tip(f"共 {total} 笔，已选 {picked} 笔。勾选需要的条目后点「入库所选」。")
+
+
 def discard_ocr():
     """放弃整张小票草稿。"""
     return (
+        "",  # 清空折叠计数
         [], "", c.tip("已放弃小票草稿。"),
         gr.update(choices=[], value=[]), gr.update(visible=False),
     )
@@ -225,7 +241,7 @@ def respond(message: str, history: list, session_id: str, draft: dict | None):
             history = _append(history, "assistant", f"查账失败：{notice}")
         else:
             content = result.get("answer_text") or "（后端未返回回答文案）"
-            table_md = c.query_table_markdown(result.get("table") or [])
+            table_md = chatui.query_table_markdown(result.get("table") or [])
             if table_md:
                 content = f"{content}\n\n{table_md}"
             if notice:
@@ -254,7 +270,7 @@ def respond(message: str, history: list, session_id: str, draft: dict | None):
             history = _append(history, "assistant", f"_{notice}_")
         return (history, "", session_id, draft, c.draft_card_placeholder(), gr.update(visible=False), *_empty_form())
 
-    content = c.draft_summary(draft)
+    content = chatui.draft_summary(draft)
     if notice:
         content = f"{content}\n\n_{notice}_"
     history = _append(history, "assistant", content)
@@ -335,21 +351,68 @@ def reset_all():
     )
 
 
-def voice_placeholder(history: list):
-    """语音输入占位：提示即将上线，不改变现有对话内容。"""
-    tip = c.tip("语音输入即将上线，目前请先用文字输入或点「＋」上传小票。")
-    return (history or []) + [{"role": "assistant", "content": tip}]
+def transcribe_voice(audio_path, history: list):
+    """录音结束 → POST /voice → 转写文本回填输入框（不直接入库）。
+
+    设计决策（week2 文档 A1，最高性价比）：转写结果必须让用户过目一遍再发送，
+    可纠正 ASR 错字、可撤回；麦克风不可用时自然降级为键盘输入。
+    """
+    if not audio_path:
+        return gr.update(), gr.update(), gr.update()
+
+    try:
+        result = api.voice_transcribe(audio_path)
+        notice = ""
+    except api.ApiError as exc:
+        if api.should_fallback(exc):
+            result = mock.voice_transcribe(audio_path)
+            notice = mock.NOTICE
+        else:
+            text = f"语音识别失败：{exc.message}。请直接打字输入。"
+            return (history or []) + [{"role": "assistant", "content": c.tip(text, kind="error")}], gr.update(), gr.update(value=None)
+
+    text = (result.get("text") or "").strip()
+    if not text:
+        tip = c.tip("没有识别到内容，请离麦克风近一点重试，或直接打字。", kind="warn")
+        return (history or []) + [{"role": "assistant", "content": tip}], gr.update(), gr.update(value=None)
+
+    bubble = f"🎙 已转写：**{text}**\n\n请核对文字（可直接修改输入框），确认无误后点发送。"
+    if notice:
+        bubble += f"\n\n_{notice}_"
+    return (history or []) + [{"role": "assistant", "content": bubble}], gr.update(value=text), gr.update(value=None)
 
 
-def toggle_ocr_menu(visible: bool):
-    """加号按钮展开 / 收起上传入口菜单。"""
-    next_visible = not bool(visible)
-    return gr.update(visible=next_visible), next_visible
+def open_attach_menu(visible: bool, mode: str):
+    """🎤 按钮：只开麦克风浮层（锚定右侧），再点一次收起。"""
+    next_visible = not (bool(visible) and mode == "voice")
+    return (
+        gr.update(visible=next_visible),  # 🎤 浮层
+        gr.update(visible=False),         # ＋ 浮层
+        "voice" if next_visible else "",
+        next_visible,
+    )
+
+
+def toggle_ocr_menu(visible: bool, mode: str):
+    """＋ 按钮：只开附件浮层（锚定左侧）；🎤 开着时直接切换，不收起。"""
+    next_visible = not (bool(visible) and mode == "plus")
+    return (
+        gr.update(visible=False),         # 🎤 浮层
+        gr.update(visible=next_visible),  # ＋ 浮层
+        "plus" if next_visible else "",
+        next_visible,
+    )
 
 
 def reset_full():
-    """清空对话与草稿，同时收起加号菜单。"""
-    return (*reset_all(), gr.update(visible=False), False)
+    """清空对话与草稿，同时收起两个浮层。"""
+    return (
+        *reset_all(),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        "",
+        False,
+    )
 
 
 def build_chat_tab() -> dict:
@@ -358,16 +421,24 @@ def build_chat_tab() -> dict:
     ocr_drafts_state = gr.State([])
     ocr_raw_state = gr.State("")
     ocr_menu_state = gr.State(False)
+    ocr_menu_mode = gr.State("")  # "" / "voice" / "plus"
 
-    with gr.Row(equal_height=False):
-        with gr.Column(scale=3, elem_classes=["fa-panel"]):
+    with gr.Row(equal_height=False, elem_classes=["fa-chat-row"]):
+        with gr.Column(scale=1, elem_classes=["fa-panel"]):
             gr.HTML(c.section_head("对话记账", "一句话 → 草稿 → 确认入库"))
             chatbot = gr.Chatbot(
                 label="记账对话",
                 value=[{"role": "assistant", "content": GREETING}],
-                height=380,
+                autoscroll=True,  # 新消息自动滚动到底部（week2 P0-2 / P1-3）
                 elem_classes=["fa-chat"],
             )
+
+            with gr.Row(elem_classes=["fa-example-chips"]):
+                example_buttons = []
+                for example in ("打车32块", "吃饭18块", "买菜50块", "存钱500", "这个月花了多少"):
+                    example_buttons.append(
+                        gr.Button(example, elem_classes=["fa-example-chip"], scale=0)
+                    )
 
             # 底部输入栏：＋ 展开附件面板 / 文本输入 / 语音输入占位 / 发送。
             # 图标统一用 CSS 数据 URI 绘制（见 style.css），避免系统字体把 ＋/➤/▣
@@ -402,8 +473,22 @@ def build_chat_tab() -> dict:
                         scale=0,
                     )
 
-                # 参考 DeepSeek 的「＋」弹出菜单：锚定在输入栏上方的小浮层，
-                # 用「圆形图标 + 文案 + 右侧说明」的列表行，而不是大块方形磁贴。
+                # 两个独立浮层：🎤 面板锚定在麦克风按钮上方（靠右），
+                # ＋ 面板锚定在加号上方（靠左）。各自按钮只开自己那一块。
+                with gr.Group(
+                    visible=False, elem_classes=["fa-attach-panel fa-voice-panel"]
+                ) as voice_menu:
+                    gr.HTML('<div class="fa-attach-title">添加内容</div>')
+                    with gr.Group(elem_classes=["fa-attach-section"]):
+                        with gr.Column(elem_classes=["fa-attach-list"]):
+                            voice_audio = gr.Audio(
+                                sources=["microphone"],
+                                type="filepath",  # numpy 拿不到可上传的文件对象（week2 P1-1）
+                                label="🎤 按住说话（建议 ≤60 秒，说完自动转写）",
+                                interactive=True,
+                                elem_classes=["fa-attach-item fa-item-voice"],
+                            )
+
                 with gr.Group(visible=False, elem_classes=["fa-attach-panel"]) as ocr_menu:
                     gr.HTML('<div class="fa-attach-title">添加内容</div>')
                     with gr.Column(elem_classes=["fa-attach-list"]):
@@ -435,37 +520,46 @@ def build_chat_tab() -> dict:
                             scale=0,
                         )
 
-        with gr.Column(scale=2):
+        with gr.Column(scale=0, min_width=288, elem_classes=["fa-confirm-col"]):
             gr.HTML(c.section_head("草稿确认卡", "确认后才会入库"))
             draft_area = gr.HTML(c.draft_card_placeholder())
             with gr.Group(visible=False) as draft_form:
                 amount_in = gr.Number(label="金额 (¥)", precision=2, minimum=0)
-                category_in = gr.Dropdown(choices=CATEGORIES, label="类别", interactive=True)
+                category_in = gr.Dropdown(
+                    choices=_category_choices(),  # GET /categories 优先（P0-2），未连通时本地枚举兜底
+                    label="类别",
+                    interactive=True,
+                )
                 merchant_in = gr.Textbox(label="商户（可空）")
                 occurred_in = gr.Textbox(label="消费时间（YYYY-MM-DD）", placeholder="2026-11-16")
                 note_in = gr.Textbox(label="备注（可空）")
                 with gr.Row(elem_classes=["fa-toolbar"]):
-                    confirm_btn = gr.Button("确认入库", variant="primary", scale=2)
+                    confirm_btn = gr.Button(
+                        "确认入库", variant="primary", scale=2,
+                        elem_classes=["fa-primary-cta"],
+                    )
                     discard_btn = gr.Button("放弃草稿", variant="stop", scale=1)
 
             with gr.Group(visible=False) as ocr_panel:
                 gr.HTML(c.section_head("小票草稿", "勾选需要的条目后入库"))
+                ocr_count = gr.HTML("")  # P2-1：动态计数「共 X 笔，已选 Y 笔」
                 ocr_info = gr.HTML(c.empty_state("尚未识别小票", "上传图片后将自动识别。"))
                 ocr_choices = gr.CheckboxGroup(
                     label="选择要入库的条目", choices=[], value=[]
                 )
                 with gr.Row(elem_classes=["fa-toolbar"]):
-                    ocr_confirm_btn = gr.Button("入库所选", variant="primary", scale=2)
+                    ocr_confirm_btn = gr.Button(
+                        "入库所选", variant="primary", scale=2,
+                        elem_classes=["fa-primary-cta"],
+                    )
                     ocr_discard_btn = gr.Button("放弃小票草稿", variant="stop", scale=1)
 
-    gr.HTML(
-        c.tip(
-            "交互约定：问句（含「多少 / 占比 / 趋势」等）走查账接口，只展示后端算好的回答与表格；"
-            "记账语句生成草稿，确认后才入库；点「＋」可使用拍照 / 相册小票识别，Excel 导入为占位入口。"
-        )
-    )
+            today_overview = gr.HTML(c.today_overview_skeleton(), elem_classes=["fa-today-slot"])
 
     # ---------------- 事件绑定 ----------------
+    for button, example in zip(example_buttons, ("打车32块", "吃饭18块", "买菜50块", "存钱500", "这个月花了多少")):
+        button.click(lambda value=example: value, inputs=None, outputs=[text_input])
+
     respond_inputs = [text_input, chatbot, session_state, draft_state]
     respond_outputs = [
         chatbot,
@@ -483,7 +577,7 @@ def build_chat_tab() -> dict:
     send_btn.click(respond, inputs=respond_inputs, outputs=respond_outputs)
     text_input.submit(respond, inputs=respond_inputs, outputs=respond_outputs)
 
-    confirm_btn.click(
+    confirm_event = confirm_btn.click(
         confirm_record,
         inputs=[draft_state, amount_in, category_in, merchant_in, occurred_in, note_in, chatbot, session_state],
         outputs=[chatbot, draft_state, draft_area, draft_form],
@@ -494,26 +588,32 @@ def build_chat_tab() -> dict:
     ocr_event_outputs = [chatbot, *ocr_outputs]
     photo_file.change(recognize_receipt, inputs=[photo_file, chatbot], outputs=ocr_event_outputs)
     album_file.change(recognize_receipt, inputs=[album_file, chatbot], outputs=ocr_event_outputs)
-    voice_btn.click(
-        voice_placeholder,
-        inputs=[chatbot],
-        outputs=[chatbot],
+    menu_inputs = [ocr_menu_state, ocr_menu_mode]
+    menu_outputs = [voice_menu, ocr_menu, ocr_menu_mode, ocr_menu_state]
+    voice_btn.click(open_attach_menu, inputs=menu_inputs, outputs=menu_outputs)
+    # 录音结束自动转写：回填文本框 + 清空录音组件，等待用户确认发送
+    voice_audio.change(
+        transcribe_voice,
+        inputs=[voice_audio, chatbot],
+        outputs=[chatbot, text_input, voice_audio],
     )
-    ocr_confirm_btn.click(
+    ocr_confirm_event = ocr_confirm_btn.click(
         confirm_ocr,
         inputs=[ocr_choices, ocr_drafts_state, ocr_raw_state, chatbot],
         outputs=ocr_event_outputs,
     )
-    ocr_discard_btn.click(discard_ocr, outputs=ocr_outputs)
-
-    plus_btn.click(
-        toggle_ocr_menu,
-        inputs=[ocr_menu_state],
-        outputs=[ocr_menu, ocr_menu_state],
+    # P2-1：勾选变化 → 更新折叠计数
+    ocr_choices.change(
+        update_ocr_count,
+        inputs=[ocr_choices, ocr_drafts_state],
+        outputs=[ocr_count],
     )
+    ocr_discard_btn.click(discard_ocr, outputs=[ocr_count, *ocr_outputs])
+
+    plus_btn.click(toggle_ocr_menu, inputs=menu_inputs, outputs=menu_outputs)
     clear_btn.click(
         reset_full,
-        outputs=[*respond_outputs, *ocr_outputs, ocr_menu, ocr_menu_state],
+        outputs=[*respond_outputs, *ocr_outputs, voice_menu, ocr_menu, ocr_menu_mode, ocr_menu_state],
     )
 
     return {
@@ -525,13 +625,17 @@ def build_chat_tab() -> dict:
         "album_file": album_file,
         "ocr_menu": ocr_menu,
         "voice_btn": voice_btn,
+        "voice_audio": voice_audio,
         "ocr_choices": ocr_choices,
         "ocr_confirm_btn": ocr_confirm_btn,
         "ocr_discard_btn": ocr_discard_btn,
         "clear_btn": clear_btn,
         "draft_area": draft_area,
+        "today_overview": today_overview,
         "draft_form": draft_form,
         "confirm_btn": confirm_btn,
+        "confirm_event": confirm_event,
+        "ocr_confirm_event": ocr_confirm_event,
         "discard_btn": discard_btn,
         "session_state": session_state,
         "draft_state": draft_state,

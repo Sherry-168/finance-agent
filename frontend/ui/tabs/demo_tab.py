@@ -11,7 +11,7 @@ import gradio as gr
 import api
 import mock
 from config import API_BASE_URL, MOCK_FALLBACK
-from ui import components as c
+from ui import cards as c
 
 
 def check_backend() -> str:
@@ -112,8 +112,8 @@ def build_demo_tab() -> dict:
 
     # ---------------- 事件绑定 ----------------
     health_btn.click(check_backend, outputs=result_area)
-    load_btn.click(load_demo_data, inputs=None, outputs=result_area)
-    reset_btn.click(
+    load_event = load_btn.click(load_demo_data, inputs=None, outputs=result_area)
+    reset_event = reset_btn.click(
         reset_demo_data,
         inputs=[confirm_reset],
         outputs=[result_area, confirm_reset],
@@ -121,7 +121,8 @@ def build_demo_tab() -> dict:
 
     return {
         "load_btn": load_btn,
-        "reset_btn": reset_btn,
+        "load_event": load_event,
+        "reset_event": reset_event,
         "health_btn": health_btn,
         "confirm_reset": confirm_reset,
         "result_area": result_area,

@@ -177,6 +177,22 @@ def parse_record(text: str, session_id: str) -> dict:
     return normalize_draft(data)
 
 
+def voice_transcribe(file_path: str) -> dict:
+    """POST /voice —— 上传录音，返回纯转写文本（开工对齐第④项口径）。
+
+    约定：multipart/form-data 字段名 file，返回 {code, data: {text}}；
+    转写文本由调用方回填文本框，由用户确认后再走 /records/parse，
+    前端不直接把录音结果入库。
+    """
+    with open(file_path, "rb") as stream:
+        data = request(
+            "POST",
+            "/voice",
+            files={"file": (os.path.basename(file_path), stream, "audio/*")},
+        ) or {}
+    return {"text": (data.get("text") or "").strip()}
+
+
 def ocr_receipt(file_path: str) -> dict:
     """POST /records/ocr —— 上传小票，返回可勾选的多笔草稿。"""
     with open(file_path, "rb") as stream:
@@ -240,9 +256,9 @@ def query(question: str, session_id: str) -> dict:
     }
 
 
-def stats_summary(month: str) -> dict:
+def stats_summary(month: str, timeout: float | None = None) -> dict:
     """GET /stats/summary —— 月度总额、笔数、日均。"""
-    return request("GET", "/stats/summary", params={"month": month}) or {}
+    return request("GET", "/stats/summary", params={"month": month}, timeout=timeout) or {}
 
 
 def stats_by_category(
@@ -260,9 +276,9 @@ def stats_by_category(
     return {"items": _first(data, "items", "list", default=[]) or []}
 
 
-def stats_trend(days: int = 30) -> dict:
+def stats_trend(days: int = 30, timeout: float | None = None) -> dict:
     """GET /stats/trend —— 每日趋势。"""
-    data = request("GET", "/stats/trend", params={"days": days}) or {}
+    data = request("GET", "/stats/trend", params={"days": days}, timeout=timeout) or {}
     return {"items": _first(data, "items", "list", default=[]) or []}
 
 
@@ -284,9 +300,9 @@ def save_budget(month: str, category: str | None, amount: float) -> dict:
     )
 
 
-def budget_alerts(month: str) -> dict:
+def budget_alerts(month: str, timeout: float | None = None) -> dict:
     """GET /budgets/alerts —— 各预算使用率与状态。"""
-    data = request("GET", "/budgets/alerts", params={"month": month}) or {}
+    data = request("GET", "/budgets/alerts", params={"month": month}, timeout=timeout) or {}
     return {"items": _first(data, "items", "alerts", default=[]) or []}
 
 
