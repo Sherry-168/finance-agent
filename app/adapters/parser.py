@@ -2,22 +2,31 @@
 
 职责边界（对齐 docs/api.md §2.1 与《项目方案设计文档》§9）：
 - 本模块只产出槽位，不写库、不统计、不拼提示文案；
-- LLM 优先：有 Key 且输出合法就用；无 Key / 超时 / 输出不合法时退回规则解析；
+- 模型优先：有 Key 且输出合法就用；无 Key / 超时 / 输出不合法时退回规则解析；
 - 金额换算（「3k」「三十二块」）由代码完成，不让模型算数；
 - 时间缺失一律返回 None，由路由层反问，**绝不默认今天**。
 
-换实现只改本文件：李语琛的 Dify 工作流交付后，替换 `_llm_parse()` 的内部实现，
-`parse_text()` 的签名与返回结构保持不变，路由 / DAO / 前端无需改动。
+解析后端可切换（验收项「LLM 调用可切 Dify」）：
+- `LLM_PROVIDER=openai` → `_openai_parse()` 调 OpenAI 兼容的 chat/completions
+- `LLM_PROVIDER=dify`   → `_dify_parse()` 调 `app.adapters.dify` 包的李语琛 Dify 工作流
+两条路径都收敛到同一套槽位结构与 `_normalize_llm_fields()`，路由 / DAO / 前端无需改动。
 """
 from __future__ import annotations
 
 import calendar
 import datetime as dt
-import json
 import re
 from typing import Any
 
-from app.core.config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_TIMEOUT, has_llm_key
+from app.adapters import dify
+from app.core.config import (
+    LLM_API_KEY,
+    LLM_BASE_URL,
+    LLM_MODEL,
+    LLM_TIMEOUT,
+    has_llm_key,
+    parser_provider,
+)
 from logic.classify import classify, normalize_category
 
 FIELDS = ("amount", "category", "merchant", "occurred_at", "note")
@@ -196,15 +205,6 @@ def _build_messages(text: str) -> list[dict[str, str]]:
     ]
 
 
-def _strip_code_fence(content: str) -> str:
-    """去掉模型偶尔包裹的 ```json 代码块。"""
-    content = content.strip()
-    if content.startswith("```"):
-        content = re.sub(r"^```[a-zA-Z]*\s*", "", content)
-        content = re.sub(r"\s*```$", "", content)
-    return content.strip()
-
-
 def _normalize_llm_fields(payload: dict[str, Any]) -> dict[str, Any] | None:
     """把模型输出收敛到契约槽位；金额无法解析或为负则视为不合法。"""
     amount = payload.get("amount")
@@ -231,8 +231,8 @@ def _normalize_llm_fields(payload: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _llm_parse(text: str) -> dict[str, Any] | None:
-    """调 OpenAI 兼容接口（DeepSeek / Qwen / Dify 均可）。
+def _openai_parse(text: str) -> dict[str, Any] | None:
+    """调 OpenAI 兼容接口（DeepSeek / Qwen / GLM）。
 
     任何异常都返回 None，由 `parse_text` 降级到规则解析——外部能力不可用时，
     应用仍能记账，而不是整条链路报错。
@@ -259,16 +259,37 @@ def _llm_parse(text: str) -> dict[str, Any] | None:
     except Exception:
         return None
 
-    try:
-        payload = json.loads(_strip_code_fence(content))
-    except ValueError:
-        return None
+    payload = dify.extract_json(content)
     # 多笔小票模型可能直接给数组，单笔解析取第一条
     if isinstance(payload, list):
         payload = payload[0] if payload else None
     if not isinstance(payload, dict):
         return None
     return _normalize_llm_fields(payload)
+
+
+def _dify_parse(text: str) -> dict[str, Any] | None:
+    """调 Dify 工作流取单笔槽位；输出是数组时取首条（验收口径）。
+
+    工作流侧已写死多轮追问与越界拒绝 Prompt，这里只做结构归一化；
+    任何异常返回 None → 上层降级规则解析，语音 / 文本链路不会整条挂掉。
+    """
+    try:
+        payload = dify.run_workflow(text)
+    except dify.DifyError:
+        return None
+
+    items = dify.result_list(payload)
+    if not items:
+        return None
+    return _normalize_llm_fields(items[0])
+
+
+def _llm_parse(text: str) -> dict[str, Any] | None:
+    """按 `LLM_PROVIDER` 选择解析后端，失败返回 None 交给规则兜底。"""
+    if parser_provider() == "dify":
+        return _dify_parse(text)
+    return _openai_parse(text)
 
 
 # ---------------------------------------------------------------- 对外入口
@@ -297,3 +318,36 @@ def parse_text(text: str) -> dict[str, Any]:
         result = dict(result)
         result["_rejected"] = True
     return result
+
+
+def normalize_many(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """把模型给出的多笔原始槽位逐个归一化，丢掉不合法的条目。
+
+    供多模态拆单（长截图 / 多商品小票）复用，避免 OCR 适配层自己写一套校验。
+    与单笔解析不同，这里**必须要求有金额**：一张小票里识别不到金额的行（合计、
+    优惠、找零）不是一笔消费，留着只会让前端多出几张空确认卡。
+    """
+    normalized = []
+    for item in items:
+        fields = _normalize_llm_fields(item)
+        if fields is not None and fields.get("amount"):
+            normalized.append(fields)
+    return normalized
+
+
+def parse_text_many(text: str) -> list[dict[str, Any]]:
+    """解析可能含多笔的输入（长截图转出的文本 / 多行小票），返回槽位列表。
+
+    只有 Dify 工作流具备一次返回数组的能力；其他后端与所有异常都回退到单笔解析，
+    保证 OCR 链路「最坏也能量出一笔」，而不是整页识别失败。
+    """
+    if parser_provider() == "dify":
+        try:
+            payload = dify.run_workflow(text)
+        except dify.DifyError:
+            payload = None
+        if payload is not None:
+            fields_list = normalize_many(dify.result_list(payload))
+            if fields_list:
+                return fields_list
+    return [parse_text(text)]

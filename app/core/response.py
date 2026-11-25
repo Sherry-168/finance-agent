@@ -14,6 +14,7 @@ PARAM_ERROR = 1001
 NOT_FOUND = 1002
 LLM_ERROR = 2001
 OCR_ERROR = 2002
+ASR_ERROR = 2003
 
 ERROR_MESSAGES: dict[int, str] = {
     SUCCESS_CODE: "ok",
@@ -21,6 +22,7 @@ ERROR_MESSAGES: dict[int, str] = {
     NOT_FOUND: "资源不存在",
     LLM_ERROR: "LLM 调用失败",
     OCR_ERROR: "OCR 识别失败",
+    ASR_ERROR: "语音识别失败",
 }
 
 
