@@ -53,16 +53,17 @@
 ```text
 finance-agent/
 ├── app/                    # 后端应用（FastAPI）
-│   ├── main.py             # 应用装配：生命周期建库、全局异常处理、路由注册
+│   ├── main.py             # 应用装配：生命周期建库、CORS、全局异常处理、路由注册
 │   ├── core/               # 基础设施：配置、响应包装、数据库连接
-│   ├── adapters/           # 解析接缝层（规则解析 / LLM 解析，对外统一 parse_text）
-│   └── routers/            # HTTP 路由：health / records / query / stats / budgets / meta / demo / ocr
+│   ├── adapters/           # 外部能力接缝：parser（解析）/ dify（工作流）/ asr（语音）/ receipt（小票）
+│   ├── services/           # 业务编排：draft（解析→草稿→入库，三条链路共用）
+│   └── routers/            # HTTP 路由：health / records / ocr / voice / alerts / query / stats / budgets / meta / demo
 ├── db/                     # 数据层：建表 SQL + DAO
-├── logic/                  # 规则层：金额换算、分类词典、统计、预算、查账槽位（纯函数）
+├── logic/                  # 规则层：金额换算、分类词典、统计、预算、异常巡检、提醒文案（纯函数）
 ├── frontend/               # Gradio 前端（api 客户端 / ui 组件 / Tab）
-├── scripts/                # 演示数据导入、自检脚本
-├── tests/                  # pytest 用例（数据层、规则层、解析与槽位）
-├── docs/                   # 接口契约、数据库设计、Prompt 说明、评审问题清单
+├── scripts/                # 演示数据导入、自检脚本、接口冒烟
+├── tests/                  # pytest 用例（数据层、规则层、解析、接口、CORS、语音/OCR 降级）
+├── docs/                   # 接口契约、数据库设计、Prompt 说明、进度与工作日志
 ├── data/                   # SQLite 文件与示例账单（容器内挂载为数据卷）
 ├── Dockerfile
 ├── docker-compose.yml
@@ -114,6 +115,7 @@ docker compose up --build
 | 统计图表 | `/stats/summary`、`/stats/by-category`、`/stats/trend` | 图表数据全部来自后端聚合 |
 | 预算中心 | `POST/GET /budgets`、`/budgets/alerts`、`/categories` | 类别/总额双维度，80% 预警、100% 超支 |
 | 演示入口 | `/health`、`/demo/load`、`/demo/reset` | 无 Key 评审环境一键体验全链路 |
+| 语音 / 全局横幅（第二周） | `POST /voice`、`GET /voice/status`、`GET /alerts`、`POST /alerts/{id}/read` | 录音转文字出草稿；顶部红 / 橙提醒横幅，可单条或全部关闭 |
 
 > 页面截图：当前开发环境没有浏览器自动化工具，无法生成真实截图；请在可浏览环境打开前端后，将各 Tab 截图保存到 `docs/screenshots/` 并在本表补充引用。
 
@@ -145,11 +147,22 @@ cd frontend && python app.py
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
+| LLM_PROVIDER | openai | 解析后端开关：`openai` 直连模型 / `dify` 走 Dify 工作流（第二周验收项「LLM 调用可切 Dify」） |
 | LLM_API_KEY | 空 | 大模型 API 密钥（OpenAI 兼容接口）；留空则解析走规则兜底，功能不受影响 |
 | LLM_BASE_URL | https://api.deepseek.com/v1 | API 地址 |
 | LLM_MODEL | deepseek-chat | 模型名 |
 | LLM_TIMEOUT | 30 | 单次模型调用超时（秒） |
-| OCR_PROVIDER | local | `api` 走视觉模型 / `local` 本地兜底（第二周接入） |
+| DIFY_API_KEY | 空 | Dify 工作流密钥（`app-` 开头）；`LLM_PROVIDER=dify` 时必填，缺失会自动回退 openai |
+| DIFY_BASE_URL | https://api.dify.ai/v1 | Dify API 地址（私有部署改这里） |
+| DIFY_INPUT_KEY | user_input | 工作流开始节点接收用户输入的变量名 |
+| ASR_PROVIDER | auto | `auto` 云端转写 / `agent` 调李语琛的 `speech_to_text` / `mock` 离线演示；**镜像内不含本地语音模型** |
+| ASR_API_KEY | 空（回退 LLM_API_KEY） | 云端语音识别密钥；留空时 `/voice` 明确返回 2003 并提示改用文本输入 |
+| ASR_BASE_URL / ASR_MODEL | https://open.bigmodel.cn/api/paas/v4 / glm-asr | OpenAI 兼容的 `/audio/transcriptions` 端点与模型 |
+| ASR_MOCK_TEXT | 昨天打车 32 块 | `ASR_PROVIDER=mock` 时固定返回的演示转写文本 |
+| OCR_PROVIDER | local | `api` 走视觉模型（支持多笔）/ `dify` 走多模态工作流 / `local` 不打包本地模型（返回 2002） |
+| VISION_API_KEY / VISION_BASE_URL / VISION_MODEL | 空 / 同 LLM_BASE_URL / glm-4v-flash | 视觉模型凭据；解析模型不一定能读图，所以单独一组 |
+| CORS_ORIGINS | * | 逗号分隔的允许来源；`*` 方便评审机器直连 8000 |
+| MAX_UPLOAD_MB | 10 | 语音与图片上传体积上限 |
 | DB_PATH | data/finance.db | SQLite 路径；容器内被 compose 覆盖为 `/app/data/finance.db` |
 | DEFAULT_USER_ID | demo_user | 单用户演示版固定用户 ID |
 | API_BASE_URL | http://localhost:8000/api/v1 | 前端请求地址；容器内为 `http://backend:8000/api/v1` |
@@ -158,20 +171,33 @@ cd frontend && python app.py
 
 > 真实密钥不得提交到仓库（`.env` 已在 `.gitignore` 中）。
 
-## 7. 当前进度（第一周）（Current Progress）
+## 7. 当前进度（Current Progress）
+
+### 7.1 第二周新增（2026-11-25）
+
+| 能力 | 状态 | 说明 |
+|---|---|---|
+| Dify 接入开关 | 已实现 | `LLM_PROVIDER=dify` 走李语琛的 Dify 工作流，`openai` 直连模型；输出是数组时自动取首条，对象 / 数组双兼容 |
+| `/alerts` 主动提醒 | 已实现 | 读 `notifications` 表，`level` 决定横幅红/橙；支持单条已读、全部已读；同月同类提醒去重，关闭后不会被轮询刷回 |
+| 入库后事件驱动扫描 | 已实现 | `POST /records` 落库后自动扫预算警戒 + 异常巡检，并把 `unread_alerts` 一并返回 |
+| `/voice` 语音录入 | 已实现 | 音频 → 云端 ASR → 复用文本解析 → 草稿；`/voice/status` 供前端决定是否禁用录音按钮 |
+| `/records/ocr` 多笔拆单 | 已实现 | 视觉模型 / Dify 多模态 → `drafts[]`，每笔一张确认卡；识别不到金额的行自动丢弃 |
+| CORS 跨域 | 已实现 | `CORS_ORIGINS` 可配，默认 `*` 方便评审机器直连 |
+| 三条链路共用草稿层 | 已实现 | `app/services/draft.py` 统一「解析 → 草稿 → 入库」，text / ocr / voice 结构完全一致 |
+
+### 7.2 第一周已完成
 
 | 能力 | 状态 | 说明 |
 |---|---|---|
 | 健康检查 / 统一响应包装 | 已实现 | `/api/v1/health` 返回标准 `{code, message, data}` |
-| 启动自动建表 | 已实现 | 首次启动自动建 4 张表并初始化分类字典 |
-| 自然语言记账 `/records/parse` | 已实现 | 有 Key 走 LLM，无 Key 走规则兜底；缺金额/时间返回 `clarify_question` |
+| 启动自动建表 | 已实现 | 首次启动自动建 5 张表（含 `notifications`）并初始化分类字典 |
+| 自然语言记账 `/records/parse` | 已实现 | 有 Key 走 LLM / Dify，无 Key 走规则兜底；缺金额/时间返回 `clarify_question` |
 | 记账入库 / 明细增删改查 | 已实现 | `/records` 五个接口全部打通，金额按「分」存储、「元」返回 |
 | 消费自动分类与统计 | 已实现 | `/stats/summary`、`/stats/by-category`、`/stats/trend` 全部基于真实入库数据 |
 | 自然语言查账 `/query` | 已实现 | 槽位抽取（时间/类别/聚合）→ 数据库聚合 → 模板生成回答，模型不参与算数 |
 | 预算与超支提醒 | 已实现 | `/budgets` 三个接口，0.8 预警 / 1.0 超支由后端判定 |
 | 演示数据一键灌入 / 清空 | 已实现 | `/demo/load`（幂等）、`/demo/reset` |
 | 前端 Gradio 界面 | 已实现 | 五个 Tab 全部对接真实接口，`MOCK_FALLBACK` 默认关闭 |
-| 小票 / 截图 OCR | 开发中 | Dify 多模态测试成功，`/records/ocr` 第二周接入 |
 
 ## 8. 功能清单与验证方式（Feature Checklist & Verification）
 
@@ -211,10 +237,28 @@ cd frontend && python app.py
 
 「预算」Tab 设置「娱乐」类 100 元（`POST /budgets`），进度条应立刻变红并显示 `113%`（已用 `¥113.00`、`status = over`）；设总额 4000 元则为 `normal`（`60%`）。预警阈值 80%（`warning`），判断在后端完成。
 
-### 8.6 自动化测试
+### 8.6 功能 5：语音输入与主动提醒（第二周）
+
+**语音记账**（`POST /voice`，前端录音按钮）：
+
+* 浏览器允许麦克风后说「昨天打车 32 块」，返回 `transcript` + 与文本链路同构的草稿，点确认入库；
+* 若未配置 `ASR_API_KEY`，接口返回 `2003` 并提示「请改用文本输入」——**文本输入始终可用**，这是硬性降级要求；
+* 没有麦克风的评标环境：设置 `ASR_PROVIDER=mock`，录音后固定返回 `ASR_MOCK_TEXT`，可完整演示链路；
+  响应里 `asr_engine=mock` 会如实标注，不会把演示结果冒充成真实识别。
+
+**主动提醒横幅**（`GET /alerts`）：
+
+1. 在「预算」Tab 给「娱乐」设 100 元，再记一笔 90 元娱乐 → 横幅为**橙色**（`level=warning`，已用 90%）；
+2. 再记一笔 30 元娱乐（累计 120 元）→ 横幅变**红色**（`level=danger`，已超支）；
+3. 点横幅上的「×」（`POST /alerts/{id}/read`）→ 横幅消失；刷新页面**不会**再冒出来（同月同类去重）；
+4. 点「全部关闭」（`POST /alerts/read-all`）→ 一次清空。
+
+### 8.7 自动化测试
 
 ```bash
-pytest tests -q            # 数据层 / 规则层 / 解析规则 / 查账槽位（63 passed）
+pytest tests -q            # 数据层 / 规则层 / 解析 / 接口 / CORS / 语音与 OCR 降级（132 passed）
+
+python scripts/selfcheck.py   # 不装 pytest 也能跑的核心逻辑自检（7 项）
 
 python scripts/smoke_api.py   # 需先启动后端：按前端客户端的调用方式跑一遍全部接口，
                               # 并用前端渲染函数消费返回字段，验证前后端无字段错位
