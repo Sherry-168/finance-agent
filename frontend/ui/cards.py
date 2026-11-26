@@ -184,7 +184,7 @@ def tip(text: str, kind: str = "info") -> str:
 def empty_state(title: str, desc: str, action: tuple[str, str] | None = None) -> str:
     """B4 空态：引导文案 + 可选跳转按钮。
 
-    action=(按钮文案, 侧栏导航 elem_id)，如 ("💬 去记一笔", "sidebar-chat")。
+    action=(按钮文案, 侧栏导航 elem_id)，如 ("去记一笔", "sidebar-chat")。
     gr.HTML 内按钮无法绑 Gradio 事件，用内联 onclick 点击侧栏导航实现跳转。
     """
     action_html = ""

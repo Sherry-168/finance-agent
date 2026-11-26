@@ -40,11 +40,11 @@ from ui.theme import APP_CSS, app_theme
 
 # 左侧导航：(显示名, elem_id, 目标 tab id, 视图标题, 面包屑)
 NAV_ITEMS = [
-    ("💬 对话记账", "sidebar-chat", "tab-chat", "对话记账", "记账 / 对话记账"),
-    ("📊 统计图表", "sidebar-stats", "tab-stats", "统计图表", "分析 / 统计图表"),
-    ("💰 预算中心", "sidebar-budget", "tab-budget", "预算中心", "管理 / 预算中心"),
-    ("📒 历史账目", "sidebar-records", "tab-records", "历史账目", "管理 / 历史账目"),
-    ("🎬 演示入口", "sidebar-demo", "tab-demo", "演示入口", "管理 / 演示入口"),
+    ("对话记账", "sidebar-chat", "tab-chat", "对话记账", "记账 / 对话记账"),
+    ("统计图表", "sidebar-stats", "tab-stats", "统计图表", "分析 / 统计图表"),
+    ("预算中心", "sidebar-budget", "tab-budget", "预算中心", "管理 / 预算中心"),
+    ("历史账目", "sidebar-records", "tab-records", "历史账目", "管理 / 历史账目"),
+    ("演示入口", "sidebar-demo", "tab-demo", "演示入口", "管理 / 演示入口"),
 ]
 
 
@@ -65,7 +65,7 @@ def _safe_load(future, fallback):
         return None, exc.message, "error"
 
 
-def refresh_shell(dismissed: set):
+def refresh_shell(dismissed):
     """首屏与定时刷新的唯一入口：一次并发拉取三块数据，只触发一次刷新。
 
     横幅、侧栏预算、今日概览共用同一批预算数据，避免重复请求和全局进度浮层。
@@ -111,7 +111,7 @@ def refresh_shell(dismissed: set):
     return (
         banner,
         items,
-        gr.update(visible=visible),  # 💰 查看预算
+        gr.update(visible=visible),  # 查看预算按钮
         gr.update(visible=visible),  # ✕ 关闭横幅
         c.sidebar_budget(summary, total, notice, notice_kind, notice_tip),
         c.today_overview(day, total, notice, notice_kind, notice_tip),
@@ -162,12 +162,15 @@ def notify_demo_reset():
     gr.Info("演示数据已清空，页面回到空态")
 
 
-def dismiss_banner(items: list, dismissed: set):
-    """关闭按钮：把当前活跃提醒全部标记已读（本会话内不再弹同一条）。"""
-    dismissed = set(dismissed or ()) | {alerts.alert_key(item) for item in items or []}
-    html = alerts.banner_html(items, dismissed, "")
+def dismiss_banner(items: list, dismissed):
+    """关闭按钮：把当前活跃提醒全部标记已读，写入 BrowserState 持久化。
+
+    BrowserState 只存 JSON 可序列化数据，故用 list 而非 set 承载已读指纹。
+    """
+    keys = set(dismissed or ()) | {alerts.alert_key(item) for item in items or []}
+    html = alerts.banner_html(items, keys, "")
     visible = bool(html)
-    return html, dismissed, gr.update(visible=visible), gr.update(visible=visible)
+    return html, sorted(keys), gr.update(visible=visible), gr.update(visible=visible)
 
 
 def check_health():
@@ -223,23 +226,27 @@ def create_app() -> gr.Blocks:
             # ---------------------------------------------------------- 右侧内容区
             with gr.Column(scale=1, min_width=0, elem_classes=["fa-content-col"]):
                 # 顶部提醒横幅与后端健康提示
-                dismissed_state = gr.State(set())
+                # B4/P1-2：BrowserState 存 localStorage，关闭后刷新页面不再重弹
+                dismissed_state = gr.BrowserState([])
                 alerts_state = gr.State([])
                 with gr.Row(equal_height=True, visible=True):
                     banner = gr.HTML("", elem_classes=["fa-banner-wrap"])
                     quick_demo_btn = gr.Button(
-                        "🎬 一键演示", variant="secondary", scale=0, size="sm",
-                        elem_classes=["fa-jump-btn"],
+                        "一键演示", variant="secondary", scale=0, size="sm",
+                        elem_classes=["fa-jump-btn fa-icon-demo"],
                     )
                     goto_budget_btn = gr.Button(
-                        "💰 查看预算", variant="secondary", scale=0, size="sm",
-                        elem_classes=["fa-jump-btn"], visible=False,
+                        "查看预算", variant="secondary", scale=0, size="sm",
+                        elem_classes=["fa-jump-btn fa-icon-budget"], visible=False,
                     )
                     dismiss_btn = gr.Button("✕", elem_classes=["fa-banner-close"], scale=0, visible=False)
 
                 with gr.Row(equal_height=True, visible=False) as health_row:
                     health_html = gr.HTML("")
-                    health_retry = gr.Button("🔄 重试连接", variant="secondary", scale=0, size="sm")
+                    health_retry = gr.Button(
+                        "重试连接", variant="secondary", scale=0, size="sm",
+                        elem_classes=["fa-icon-retry"],
+                    )
 
                 with gr.Tabs(elem_classes=["fa-main-tabs"]) as tabs:
                     with gr.Tab("记账对话", id="tab-chat"):

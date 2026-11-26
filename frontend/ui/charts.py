@@ -59,6 +59,7 @@ def pie_figure(items: list) -> "go.Figure":
 
     fig = go.Figure(
         go.Pie(
+            name="消费类别占比",
             labels=labels,
             values=values,
             hole=0.42,
@@ -80,6 +81,7 @@ def trend_figure(items: list) -> "go.Figure":
 
     fig = go.Figure(
         go.Scatter(
+            name="每日支出趋势",
             x=dates,
             y=totals,
             customdata=counts,

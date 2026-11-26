@@ -134,7 +134,7 @@ def build_budget_tab() -> dict:
             gr.HTML(c.section_head("预算进度与提醒", "已用 ≥80% 预警、≥100% 超支"))
             progress_area = gr.HTML(c.empty_state(
                 "尚未加载预警", "切到本页或点「加载预警」自动刷新。",
-                action=("💬 先去记一笔", "sidebar-chat"),
+                action=("先去记一笔", "sidebar-chat"),
             ))
             budget_list_area = gr.HTML(c.budget_list([]))
 
