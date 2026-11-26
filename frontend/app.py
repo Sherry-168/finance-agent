@@ -65,7 +65,7 @@ def _safe_load(future, fallback):
         return None, exc.message, "error"
 
 
-def refresh_shell(dismissed: set):
+def refresh_shell(dismissed):
     """首屏与定时刷新的唯一入口：一次并发拉取三块数据，只触发一次刷新。
 
     横幅、侧栏预算、今日概览共用同一批预算数据，避免重复请求和全局进度浮层。
@@ -162,12 +162,15 @@ def notify_demo_reset():
     gr.Info("演示数据已清空，页面回到空态")
 
 
-def dismiss_banner(items: list, dismissed: set):
-    """关闭按钮：把当前活跃提醒全部标记已读（本会话内不再弹同一条）。"""
-    dismissed = set(dismissed or ()) | {alerts.alert_key(item) for item in items or []}
-    html = alerts.banner_html(items, dismissed, "")
+def dismiss_banner(items: list, dismissed):
+    """关闭按钮：把当前活跃提醒全部标记已读，写入 BrowserState 持久化。
+
+    BrowserState 只存 JSON 可序列化数据，故用 list 而非 set 承载已读指纹。
+    """
+    keys = set(dismissed or ()) | {alerts.alert_key(item) for item in items or []}
+    html = alerts.banner_html(items, keys, "")
     visible = bool(html)
-    return html, dismissed, gr.update(visible=visible), gr.update(visible=visible)
+    return html, sorted(keys), gr.update(visible=visible), gr.update(visible=visible)
 
 
 def check_health():
@@ -223,7 +226,8 @@ def create_app() -> gr.Blocks:
             # ---------------------------------------------------------- 右侧内容区
             with gr.Column(scale=1, min_width=0, elem_classes=["fa-content-col"]):
                 # 顶部提醒横幅与后端健康提示
-                dismissed_state = gr.State(set())
+                # B4/P1-2：BrowserState 存 localStorage，关闭后刷新页面不再重弹
+                dismissed_state = gr.BrowserState([])
                 alerts_state = gr.State([])
                 with gr.Row(equal_height=True, visible=True):
                     banner = gr.HTML("", elem_classes=["fa-banner-wrap"])

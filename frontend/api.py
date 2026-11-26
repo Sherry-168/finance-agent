@@ -181,6 +181,7 @@ def voice_transcribe(file_path: str) -> dict:
     """POST /voice —— 上传录音，返回纯转写文本（开工对齐第④项口径）。
 
     约定：multipart/form-data 字段名 file，返回 {code, data: {text}}；
+    兼容后端按 ASR 常见命名返回的 data.transcript，避免字段错位读成空串。
     转写文本由调用方回填文本框，由用户确认后再走 /records/parse，
     前端不直接把录音结果入库。
     """
@@ -190,7 +191,8 @@ def voice_transcribe(file_path: str) -> dict:
             "/voice",
             files={"file": (os.path.basename(file_path), stream, "audio/*")},
         ) or {}
-    return {"text": (data.get("text") or "").strip()}
+    text = (data.get("text") or data.get("transcript") or "") if isinstance(data, dict) else ""
+    return {"text": str(text).strip()}
 
 
 def ocr_receipt(file_path: str) -> dict:
