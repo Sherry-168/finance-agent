@@ -111,10 +111,18 @@ def build_stats_tab() -> dict:
     with gr.Row(equal_height=True):
         with gr.Column(scale=1):
             gr.HTML(c.section_head("类别占比", "GET /stats/by-category · Plotly"))
-            pie_chart = gr.Plot(value=charts.empty_figure("点击「刷新统计」或切到本页自动加载"))
+            pie_chart = gr.Plot(
+                value=charts.empty_figure("点击「刷新统计」或切到本页自动加载"),
+                elem_id="chart-pie",
+            )
+            gr.HTML('<p class="fa-sr-only" id="chart-pie-desc">类别占比饼图，展示本月各消费类别的支出比例。</p>')
         with gr.Column(scale=1):
             gr.HTML(c.section_head("每日趋势", "GET /stats/trend?days= · Plotly"))
-            trend_chart = gr.Plot(value=charts.empty_figure("点击「刷新统计」或切到本页自动加载"))
+            trend_chart = gr.Plot(
+                value=charts.empty_figure("点击「刷新统计」或切到本页自动加载"),
+                elem_id="chart-trend",
+            )
+            gr.HTML('<p class="fa-sr-only" id="chart-trend-desc">每日趋势折线图，展示近期每日支出金额与笔数。</p>')
 
     gr.HTML(
         c.tip(

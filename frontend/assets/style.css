@@ -262,6 +262,36 @@ footer {
     box-shadow: var(--fa-shadow);
 }
 
+/* ------------------------------ SVG 图标（替代按钮 emoji） ------------------------------ */
+/* 空态跳转按钮：对话气泡图标 */
+.fa-empty-action::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* 顶部操作按钮图标：演示 / 预算 / 重试 */
+.fa-icon-demo::before,
+.fa-icon-budget::before,
+.fa-icon-retry::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    flex: none;
+    margin-right: 6px;
+    background: currentColor;
+    -webkit-mask: var(--btn-icon) center / contain no-repeat;
+    mask: var(--btn-icon) center / contain no-repeat;
+}
+
+.fa-icon-demo { --btn-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpolygon points='10 8 16 12 10 16 10 8'/%3E%3C/svg%3E"); }
+.fa-icon-budget { --btn-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='14' rx='2'/%3E%3Cpath d='M2 10h20'/%3E%3Ccircle cx='17' cy='15' r='1.5'/%3E%3C/svg%3E"); }
+.fa-icon-retry { --btn-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a9 9 0 1 1-3-6.7L21 8'/%3E%3Cpolyline points='21 3 21 8 16 8'/%3E%3C/svg%3E"); }
+
 /* ------------------------------ 指标卡 ------------------------------ */
 .fa-metric-grid {
     display: grid;
@@ -1586,6 +1616,25 @@ button.fa-attach-item::after {
     box-shadow: none !important;
 }
 
+/* ------------------------------ 导航 SVG 图标（替代 emoji） ------------------------------ */
+/* mask + currentColor：单色描边图标随文字色变化，激活项自动高亮，无外链资源 */
+.fa-sidebar button::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    margin-right: 10px;
+    background: currentColor;
+    -webkit-mask: var(--nav-icon) center / contain no-repeat;
+    mask: var(--nav-icon) center / contain no-repeat;
+}
+
+#sidebar-chat { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3C/svg%3E"); }
+#sidebar-stats { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='20' x2='18' y2='10'/%3E%3Cline x1='12' y1='20' x2='12' y2='4'/%3E%3Cline x1='6' y1='20' x2='6' y2='14'/%3E%3C/svg%3E"); }
+#sidebar-budget { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='14' rx='2'/%3E%3Cpath d='M2 10h20'/%3E%3Ccircle cx='17' cy='15' r='1.5'/%3E%3C/svg%3E"); }
+#sidebar-records { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='8' y1='6' x2='21' y2='6'/%3E%3Cline x1='8' y1='12' x2='21' y2='12'/%3E%3Cline x1='8' y1='18' x2='21' y2='18'/%3E%3Ccircle cx='4' cy='6' r='1'/%3E%3Ccircle cx='4' cy='12' r='1'/%3E%3Ccircle cx='4' cy='18' r='1'/%3E%3C/svg%3E"); }
+#sidebar-demo { --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpolygon points='10 8 16 12 10 16 10 8'/%3E%3C/svg%3E"); }
+
 .fa-sidebar button:hover {
     background: rgba(255, 255, 255, .10) !important;
     color: var(--fa-side-ink) !important;
@@ -2000,12 +2049,160 @@ button.fa-attach-item::after {
     font-size: 12.5px !important;
 }
 
+/* 可访问性：屏幕阅读器专用文本（视觉隐藏但仍可被辅助技术读取） */
+.fa-sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* 可访问性：键盘焦点统一主色 outline；输入框沿用其专属 focus 外发光 */
+:where(button, a, [role="button"], input, textarea, select):focus-visible {
+    outline: 2px solid var(--fa-primary) !important;
+    outline-offset: 2px !important;
+}
+
+.fa-composer-input textarea:focus-visible,
+.fa-composer-input input:focus-visible {
+    outline: none !important;
+}
+
+/* ==================================================================
+   Impeccable polish pass（局部缺陷修复，保留既有视觉世界）
+   ================================================================== */
+
+/* 1) 嵌套圆角：子控件圆角统一比卡片小一档，避免贴边露白边 */
+:root {
+    --fa-radius-inner: 10px;
+}
+.fa-draft-amount,
+.fa-side-budget,
+.fa-metric,
+.fa-today,
+.fa-confirm-col .fa-draft {
+    border-radius: var(--fa-radius-inner) !important;
+}
+
+/* 2) 图标对齐：SVG 图标与文字光学居中，图标列固定宽度 */
+.fa-sidebar button,
+.fa-icon-demo,
+.fa-icon-budget,
+.fa-icon-retry {
+    align-items: center !important;
+}
+.fa-sidebar button::before,
+.fa-icon-demo::before,
+.fa-icon-budget::before,
+.fa-icon-retry::before,
+.fa-empty-action::before {
+    align-self: center !important;
+    line-height: 1 !important;
+    flex: 0 0 auto !important;
+}
+@media (max-width: 900px) {
+    .fa-sidebar button::before { margin-right: 0 !important; }
+}
+
+/* 3) 文字换行：字段值和数据行单向截断，不撑破卡片 */
+.fa-field-value,
+.fa-today-row b,
+.fa-dash-row b,
+.fa-side-budget-meta span {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+/* 4) 数字跳动：所有金额/比例统一等宽数字 */
+.fa-amount,
+.fa-side-budget-top b,
+.fa-side-ring > span,
+.fa-draft-amount,
+.fa-today-row b,
+.fa-dash-row b,
+.fa-conf-mark,
+.fa-badge {
+    font-variant-numeric: tabular-nums !important;
+}
+
+/* 5) 按钮按压态：hover 抬升、active 下沉，状态有连续反馈 */
+.fa-empty-action:active,
+.fa-icon-demo:active,
+.fa-icon-budget:active,
+.fa-icon-retry:active,
+.fa-sidebar button:active,
+.fa-primary-cta:active {
+    transform: translateY(1px) scale(.985) !important;
+    box-shadow: var(--fa-shadow-sm) !important;
+}
+
+/* 6) 阴影：hover 才抬到高一级，默认保持低层级 */
+.fa-draft,
+.fa-today,
+.fa-metric,
+.fa-panel {
+    box-shadow: var(--fa-shadow-sm) !important;
+    transition: box-shadow 200ms cubic-bezier(.16, 1, .3, 1) !important;
+}
+.fa-draft:hover,
+.fa-today:hover,
+.fa-metric:hover {
+    box-shadow: var(--fa-shadow) !important;
+}
+
+/* 7) 进入/退出动画：进入 180ms、退出 120ms，transform + opacity，不驱动布局 */
+@keyframes fa-enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fa-exit {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-3px); }
+}
+.fa-draft,
+.fa-today,
+.fa-banner,
+.fa-bottom-tip .fa-tip {
+    animation: fa-enter 180ms cubic-bezier(.16, 1, .3, 1) both;
+}
+.fa-is-exiting {
+    animation: fa-exit 120ms cubic-bezier(.4, 0, 1, 1) both !important;
+    pointer-events: none;
+}
+
+/* reduced-motion：去掉空间移动，保留 opacity / color / shadow 等有意义反馈 */
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-property: opacity, color, background-color, border-color, box-shadow !important;
+        transition-duration: 120ms !important;
+    }
+    .fa-draft,
+    .fa-today,
+    .fa-banner,
+    .fa-bottom-tip .fa-tip,
+    .fa-is-exiting {
         animation: none !important;
-        transition: none !important;
+    }
+    .fa-empty-action:hover,
+    .fa-icon-btn:hover,
+    .fa-empty-action:active,
+    .fa-icon-demo:active,
+    .fa-icon-budget:active,
+    .fa-icon-retry:active,
+    .fa-sidebar button:active,
+    .fa-primary-cta:active {
+        transform: none !important;
     }
 }
 

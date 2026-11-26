@@ -90,7 +90,7 @@ def _query(start, end, category, size: int, page: int):
         "点击表格任意一行可载入下方编辑区进行修正或删除。",
     ) if items else c.empty_state(
         "暂无数据", "换个筛选条件，或先在「记账对话」里记几笔。",
-        action=("💬 去记一笔", "sidebar-chat"),
+        action=("去记一笔", "sidebar-chat"),
     )
     return rows, _page_info_html(result, notice), status, int(result.get("page") or page), items
 
@@ -243,7 +243,7 @@ def build_records_tab() -> dict:
 
     # P0-4 空态跳转：gr.HTML 内按钮无法绑事件，用真实 Button + js 直点页签
     jump_chat_btn = gr.Button(
-        "💬 去对话页记一笔",
+        "去对话页记一笔",
         variant="secondary",
         size="sm",
         elem_classes=["fa-jump-btn"],

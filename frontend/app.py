@@ -40,11 +40,11 @@ from ui.theme import APP_CSS, app_theme
 
 # 左侧导航：(显示名, elem_id, 目标 tab id, 视图标题, 面包屑)
 NAV_ITEMS = [
-    ("💬 对话记账", "sidebar-chat", "tab-chat", "对话记账", "记账 / 对话记账"),
-    ("📊 统计图表", "sidebar-stats", "tab-stats", "统计图表", "分析 / 统计图表"),
-    ("💰 预算中心", "sidebar-budget", "tab-budget", "预算中心", "管理 / 预算中心"),
-    ("📒 历史账目", "sidebar-records", "tab-records", "历史账目", "管理 / 历史账目"),
-    ("🎬 演示入口", "sidebar-demo", "tab-demo", "演示入口", "管理 / 演示入口"),
+    ("对话记账", "sidebar-chat", "tab-chat", "对话记账", "记账 / 对话记账"),
+    ("统计图表", "sidebar-stats", "tab-stats", "统计图表", "分析 / 统计图表"),
+    ("预算中心", "sidebar-budget", "tab-budget", "预算中心", "管理 / 预算中心"),
+    ("历史账目", "sidebar-records", "tab-records", "历史账目", "管理 / 历史账目"),
+    ("演示入口", "sidebar-demo", "tab-demo", "演示入口", "管理 / 演示入口"),
 ]
 
 
@@ -111,7 +111,7 @@ def refresh_shell(dismissed):
     return (
         banner,
         items,
-        gr.update(visible=visible),  # 💰 查看预算
+        gr.update(visible=visible),  # 查看预算按钮
         gr.update(visible=visible),  # ✕ 关闭横幅
         c.sidebar_budget(summary, total, notice, notice_kind, notice_tip),
         c.today_overview(day, total, notice, notice_kind, notice_tip),
@@ -232,18 +232,21 @@ def create_app() -> gr.Blocks:
                 with gr.Row(equal_height=True, visible=True):
                     banner = gr.HTML("", elem_classes=["fa-banner-wrap"])
                     quick_demo_btn = gr.Button(
-                        "🎬 一键演示", variant="secondary", scale=0, size="sm",
-                        elem_classes=["fa-jump-btn"],
+                        "一键演示", variant="secondary", scale=0, size="sm",
+                        elem_classes=["fa-jump-btn fa-icon-demo"],
                     )
                     goto_budget_btn = gr.Button(
-                        "💰 查看预算", variant="secondary", scale=0, size="sm",
-                        elem_classes=["fa-jump-btn"], visible=False,
+                        "查看预算", variant="secondary", scale=0, size="sm",
+                        elem_classes=["fa-jump-btn fa-icon-budget"], visible=False,
                     )
                     dismiss_btn = gr.Button("✕", elem_classes=["fa-banner-close"], scale=0, visible=False)
 
                 with gr.Row(equal_height=True, visible=False) as health_row:
                     health_html = gr.HTML("")
-                    health_retry = gr.Button("🔄 重试连接", variant="secondary", scale=0, size="sm")
+                    health_retry = gr.Button(
+                        "重试连接", variant="secondary", scale=0, size="sm",
+                        elem_classes=["fa-icon-retry"],
+                    )
 
                 with gr.Tabs(elem_classes=["fa-main-tabs"]) as tabs:
                     with gr.Tab("记账对话", id="tab-chat"):
