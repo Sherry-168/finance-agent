@@ -61,7 +61,7 @@ finance-agent/
 ├── db/                     # 数据层：建表 SQL + DAO
 ├── logic/                  # 规则层：金额换算、分类词典、统计、预算、异常巡检、提醒文案（纯函数）
 ├── frontend/               # Gradio 前端（api 客户端 / ui 组件 / Tab）
-├── scripts/                # 演示数据导入、自检脚本、接口冒烟
+├── scripts/                # 演示数据导入、自检、接口冒烟、ASR 评测、提醒造数、录屏分镜生成
 ├── tests/                  # pytest 用例（数据层、规则层、解析、接口、CORS、语音/OCR 降级）
 ├── docs/                   # 接口契约、数据库设计、Prompt 说明、进度与工作日志
 ├── data/                   # SQLite 文件与示例账单（容器内挂载为数据卷）
@@ -256,10 +256,14 @@ cd frontend && python app.py
 3. 点横幅上的「×」（`POST /alerts/{id}/read`）→ 横幅消失；刷新页面**不会**再冒出来（同月同类去重）；
 4. 点「全部关闭」（`POST /alerts/read-all`）→ 一次清空。
 
+> 已修复的端到端 Bug：前端曾把 `/voice` 的 `transcript` 误读成 `text`，录音识别成功却永远回填空串；
+> 横幅曾直接读实时预算进度，点关闭后刷新会复活。现在横幅以 `/alerts` 的持久化已读状态为准，
+> 关闭会调用 `POST /alerts/read-all`。修正 / 删除撑爆预算的记录后也会立即重扫并撤掉横幅。
+
 ### 8.7 自动化测试
 
 ```bash
-pytest tests -q            # 数据层 / 规则层 / 解析 / 接口 / CORS / 语音与 OCR 降级（132 passed）
+pytest tests -q            # 数据层 / 规则层 / 解析 / 接口 / CORS / 语音与 OCR 降级 / 端到端回归 / ASR 评测工具（156 passed）
 
 python scripts/selfcheck.py   # 不装 pytest 也能跑的核心逻辑自检（7 项）
 
@@ -268,6 +272,95 @@ python scripts/smoke_api.py   # 需先启动后端：按前端客户端的调用
 
 docker compose exec backend python -m pytest tests -q   # 镜像内已包含 tests/，容器内同样可自检
 ```
+
+### 8.8 全模态与提醒专项测试
+
+**语音准确率实测**（不同麦克风 / 环境噪音）：
+
+```bash
+python scripts/asr_benchmark.py self-test            # 无麦克风自检：CER/分组/报告链路
+# 1) 把原始录音按 <设备>__<噪声>__<phrase01|02|03>.m4a 命名，一键转 WAV 并生成 manifest：
+python scripts/asr_sample_helper.py --input "C:/path/to/raw_recordings"
+# 2) 也可手工填 data/asr_samples/manifest.template.csv；若只有安静环境录音，可派生噪声仿真样本：
+python scripts/asr_benchmark.py derive --input data/asr_samples/manifest.template.csv
+# 3) 配好 ASR_API_KEY 并启动后端后实测；结果写入 docs/asr-benchmark-report.md
+python scripts/asr_benchmark.py run --manifest data/asr_samples/manifest.csv --backend api \
+  --base-url http://127.0.0.1:8000/api/v1 --report docs/asr-benchmark-report.md
+```
+
+云端协议按供应商三选一（`.env` 里配，容器由 compose 注入）：
+
+```ini
+# 智谱 GLM：OpenAI 标准 /audio/transcriptions
+ASR_PROVIDER=auto
+ASR_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+ASR_MODEL=glm-asr
+ASR_PROTOCOL=openai
+
+# 阿里云百炼 DashScope：没有 /audio/transcriptions，需走 chat/completions + input_audio
+ASR_PROVIDER=auto
+ASR_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+ASR_MODEL=qwen3-asr-flash
+ASR_PROTOCOL=chat
+
+# 阿里云百炼全模态模型（当前默认，有免费额度）：除 audio 外还要给文字指令、
+# 显式关掉深度思考；模型不认 asr_options，改用指令要求金额写阿拉伯数字。
+ASR_PROVIDER=auto
+ASR_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+ASR_MODEL=qwen3.8-omni-flash
+ASR_PROTOCOL=omni
+```
+
+> `qwen3.8-omni-flash` 是**全模态模型**（文本/图片/音频/视频输入），语音转写是能力之一，
+> 不是专用 ASR；实测 6 条真实样本（笔记本麦克风 × 安静/风扇噪音）**CER=0 / 准确率 100%**。
+> `qwen-mt-uni` 是**翻译模型**（需 `target_lang`，音频翻译为音频），**不能**用于语音识别。
+
+换配置后 `docker compose up -d --build --force-recreate backend`（改了源码必须 rebuild，只 recreate 会跑旧镜像）。
+`chat` 协议下 ITN 默认开启，把「三十二」规范化成「32」；`omni` 协议下由文字指令达到同样效果。
+
+报告按「设备 × 噪声条件」给出字符准确率 `1 - CER`、完全匹配率与失败数。
+若样本含 `engine=mock`，报告标题与开头会自动标注「不可作为真实准确率交付」，防止误交。
+`derive` 只做增益/噪声仿真，不能替代真实麦克风录音；`mock` 引擎的数字只用于验证工具链，
+答辩时请如实说明。输入需为 16-bit 单声道 WAV（`ffmpeg -i in.webm -ac 1 -ar 16000 -c:a pcm_s16le out.wav`）。
+
+**预算爆表数据 + 横幅验证**：
+
+```bash
+python scripts/load_alert_fixture.py                  # 临时库跑通，绝不碰 data/finance.db
+# 或灌入正在运行的后端用于现场演示：
+python scripts/load_alert_fixture.py --mode api --base-url http://127.0.0.1:8000/api/v1
+```
+
+数据文件 `data/alert_fixture.json` 会同时制造：餐饮 90/100（橙色 warning）、
+娱乐 130/100（红色 over）、交通 500/总预算 2000（正常）。脚本会断言 `/alerts` 同时返回
+橙、红两条提醒，并把真实横幅 HTML 写入 `docs/alert-banner-sample.html`。
+
+### 8.9 答辩演示录屏物料
+
+**真实界面录屏**（推荐用作答辩主视频）：
+
+```bash
+# 前置：docker compose up -d --build，浏览器打开 http://localhost:7860 并置于前台
+python scripts/record_gui_demo.py --out docs/demo-recording.mp4 --seconds 50
+```
+
+脚本用 mss 抓屏 + ffmpeg 编码，按「片头横幅 → 对话追问 → 草稿生成 → 统计图表」四幕
+自动点击真实 Gradio 界面，产出 `docs/demo-recording.mp4`（约 68 秒、1280×720）。
+依赖 `mss / pyautogui / opencv-python / imageio-ffmpeg`。
+
+**分镜预演动画**（备用/先讲故事线）：
+
+```bash
+python scripts/demo_record.py            # 生成 docs/demo-storyboard.mp4 + 分镜说明
+```
+
+动画底层数据全部来自真实接口链路，但不是 Gradio 界面录屏；
+真实录屏步骤、旁白文案与镜头时长见 `docs/答辩演示录屏脚本.md`。
+
+**横幅弹不出来时（数据已读/已保存）**：横幅读的是 `/alerts` 持久化提醒，点过「✕」后
+`is_read=1` 会一直保留，普通刷新/重扫不会复活（这是正确行为）。答辩要反复演示弹出时，
+跑 `python scripts/replay_alert_banner.py` 或点页面顶部「🔄 重播横幅」按钮，一键重置为未读；
+脚本会在库为空时自动灌入餐饮 90%/娱乐 130% 触发数据。详见 `docs/答辩演示录屏脚本.md` §2.5。
 
 ## 9. 团队分工（Team Division）
 
